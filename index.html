@@ -113,6 +113,7 @@
             border-radius: 10px;
             font-size: 14px;
             display: none;
+            line-height: 1.5;
         }
 
         .status.info {
@@ -194,39 +195,75 @@
         }
 
         .tips ul li::before {
-            content: "•";
+            content: "\2022";
             position: absolute;
             left: 6px;
             color: #0f3460;
         }
 
-        .mode-toggle {
+        .history {
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .history h3 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 10px;
             display: flex;
-            justify-content: center;
-            margin-bottom: 24px;
-            gap: 8px;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        .mode-btn {
-            padding: 8px 16px;
-            border: 2px solid #e0e0e0;
-            background: white;
-            border-radius: 8px;
-            font-size: 13px;
+        .history h3 button {
+            font-size: 12px;
+            color: #999;
+            background: none;
+            border: none;
             cursor: pointer;
-            transition: all 0.2s;
-            color: #666;
         }
 
-        .mode-btn.active {
-            border-color: #0f3460;
-            background: #0f3460;
-            color: white;
+        .history h3 button:hover {
+            color: #c62828;
         }
 
-        .mode-btn:hover:not(.active) {
-            border-color: #0f3460;
+        .history-list {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f5f5f5;
+            font-size: 13px;
+            color: #555;
+            cursor: pointer;
+        }
+
+        .history-item:hover {
             color: #0f3460;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-item .url-text {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-empty {
+            font-size: 13px;
+            color: #aaa;
+            text-align: center;
+            padding: 10px 0;
         }
     </style>
 </head>
@@ -234,23 +271,18 @@
     <div class="container">
         <div class="header">
             <h1>视频下载工具</h1>
-            <p>输入视频链接地址，直接下载视频文件</p>
-        </div>
-
-        <div class="mode-toggle">
-            <button class="mode-btn active" onclick="setMode('proxy')" id="mode-proxy">代理模式</button>
-            <button class="mode-btn" onclick="setMode('direct')" id="mode-direct">直接模式</button>
+            <p>粘贴视频链接地址，一键下载视频文件到电脑</p>
         </div>
 
         <div class="input-group">
             <label for="videoUrl">视频链接地址</label>
-            <input type="url" id="videoUrl" placeholder="https://example.com/video.mp4" 
+            <input type="url" id="videoUrl" placeholder="粘贴视频链接，例如: https://example.com/video.mp4" 
                    onkeypress="if(event.key==='Enter')downloadVideo()">
         </div>
 
         <div class="input-group">
-            <label for="fileName">文件名（可选）</label>
-            <input type="text" id="fileName" placeholder="自动从URL提取，或输入自定义文件名">
+            <label for="fileName">保存文件名（可选，不填自动生成）</label>
+            <input type="text" id="fileName" placeholder="例如: 我的视频.mp4">
         </div>
 
         <button class="btn-download" id="btnDownload" onclick="downloadVideo()">
@@ -266,30 +298,34 @@
 
         <div class="status" id="status"></div>
 
+        <div class="history" id="historySection">
+            <h3>
+                <span>下载历史</span>
+                <button onclick="clearHistory()">清空</button>
+            </h3>
+            <div id="historyList"></div>
+        </div>
+
         <div class="tips">
             <h3>使用说明</h3>
             <ul>
-                <li><strong>代理模式</strong>：通过后端服务器代理下载，可绕过跨域限制（需启动后端服务）</li>
-                <li><strong>直接模式</strong>：浏览器直接下载，适用于无跨域限制的直链视频</li>
+                <li>将视频链接粘贴到上方输入框，点击"开始下载"即可</li>
                 <li>支持 MP4、WebM、AVI、MKV、MOV 等常见视频格式</li>
-                <li>支持任何可直接访问的视频文件 URL</li>
-                <li>如遇下载失败，请检查链接是否为有效的视频直链</li>
+                <li>适用于可以直接访问的视频文件链接（直链）</li>
+                <li>如果下载的是网页而不是视频，说明链接不是视频直链</li>
+                <li>本工具无需安装任何软件，打开网页即可使用</li>
+                <li>下载的视频保存在浏览器默认的"下载"文件夹中</li>
             </ul>
         </div>
     </div>
 
     <script>
-        let currentMode = 'proxy';
-
-        function setMode(mode) {
-            currentMode = mode;
-            document.getElementById('mode-proxy').classList.toggle('active', mode === 'proxy');
-            document.getElementById('mode-direct').classList.toggle('active', mode === 'direct');
-        }
+        // Load download history on page load
+        document.addEventListener('DOMContentLoaded', loadHistory);
 
         function showStatus(message, type) {
             const status = document.getElementById('status');
-            status.textContent = message;
+            status.innerHTML = message;
             status.className = 'status ' + type;
         }
 
@@ -309,7 +345,6 @@
         function getFileName(url) {
             const customName = document.getElementById('fileName').value.trim();
             if (customName) {
-                // Ensure it has a video extension
                 if (!/\.\w{2,4}$/.test(customName)) {
                     const urlExt = url.split('?')[0].split('.').pop();
                     const validExts = ['mp4', 'webm', 'avi', 'mkv', 'mov', 'flv', 'wmv'];
@@ -318,7 +353,6 @@
                 }
                 return customName;
             }
-            // Extract from URL
             try {
                 const pathname = new URL(url).pathname;
                 const name = pathname.split('/').pop();
@@ -336,11 +370,10 @@
                 return;
             }
 
-            // Basic URL validation
             try {
                 new URL(url);
             } catch (e) {
-                showStatus('请输入有效的URL地址', 'error');
+                showStatus('请输入有效的链接地址（以 http:// 或 https:// 开头）', 'error');
                 return;
             }
 
@@ -349,115 +382,80 @@
             btn.textContent = '下载中...';
             hideStatus();
 
-            if (currentMode === 'direct') {
-                await downloadDirect(url);
-            } else {
-                await downloadViaProxy(url);
+            const fileName = getFileName(url);
+
+            // Try fetch first for progress display, fall back to direct link
+            try {
+                showProgress(true);
+                updateProgress(0, '正在连接...');
+
+                const response = await fetch(url, {
+                    mode: 'cors',
+                    redirect: 'follow'
+                });
+
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+
+                const contentLength = response.headers.get('content-length');
+                const total = contentLength ? parseInt(contentLength) : 0;
+                let loaded = 0;
+
+                const reader = response.body.getReader();
+                const chunks = [];
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    loaded += value.length;
+
+                    if (total > 0) {
+                        const percent = Math.round((loaded / total) * 100);
+                        updateProgress(percent, '下载中: ' + formatSize(loaded) + ' / ' + formatSize(total) + ' (' + percent + '%)');
+                    } else {
+                        updateProgress(50, '下载中: ' + formatSize(loaded));
+                    }
+                }
+
+                const blob = new Blob(chunks);
+                triggerBlobDownload(blob, fileName);
+                updateProgress(100, '下载完成!');
+                showStatus('下载成功! 文件已保存为: ' + fileName + ' (' + formatSize(loaded) + ')', 'success');
+                saveHistory(url, fileName);
+
+            } catch (error) {
+                // Fetch failed (likely CORS) - use fallback direct link method
+                showProgress(false);
+                console.log('Fetch failed, using direct link method:', error.message);
+                directLinkDownload(url, fileName);
             }
 
             btn.disabled = false;
             btn.textContent = '开始下载';
         }
 
-        async function downloadDirect(url) {
-            const fileName = getFileName(url);
-            showProgress(true);
-            updateProgress(0, '正在连接...');
+        function directLinkDownload(url, fileName) {
+            // Method: create a temporary <a> element with download attribute
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
 
-            try {
-                const response = await fetch(url, { mode: 'cors' });
-                if (!response.ok) {
-                    throw new Error('HTTP ' + response.status + ': ' + response.statusText);
-                }
-
-                const contentLength = response.headers.get('content-length');
-                const total = contentLength ? parseInt(contentLength) : 0;
-                let loaded = 0;
-
-                const reader = response.body.getReader();
-                const chunks = [];
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    chunks.push(value);
-                    loaded += value.length;
-
-                    if (total > 0) {
-                        const percent = Math.round((loaded / total) * 100);
-                        updateProgress(percent, `下载中: ${formatSize(loaded)} / ${formatSize(total)} (${percent}%)`);
-                    } else {
-                        updateProgress(50, `下载中: ${formatSize(loaded)}`);
-                    }
-                }
-
-                const blob = new Blob(chunks);
-                triggerDownload(blob, fileName);
-                updateProgress(100, '下载完成!');
-                showStatus(`下载成功! 文件: ${fileName} (${formatSize(loaded)})`, 'success');
-            } catch (error) {
-                showProgress(false);
-                if (error.message.includes('Failed to fetch') || error.message.includes('CORS')) {
-                    showStatus('下载失败: 跨域限制。请尝试使用"代理模式"', 'error');
-                } else {
-                    showStatus('下载失败: ' + error.message, 'error');
-                }
-            }
+            showStatus(
+                '已触发下载! 请查看浏览器底部或"下载"文件夹。<br><br>' +
+                '<small style="color:#666;">提示: 如果浏览器打开了视频而不是下载，请在视频上右键选择"另存为"来保存。</small>',
+                'info'
+            );
+            saveHistory(url, fileName);
         }
 
-        async function downloadViaProxy(url) {
-            const fileName = getFileName(url);
-            showProgress(true);
-            updateProgress(0, '正在通过代理服务器下载...');
-
-            try {
-                const response = await fetch('/api/download', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url })
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.error || 'HTTP ' + response.status);
-                }
-
-                const contentLength = response.headers.get('content-length');
-                const total = contentLength ? parseInt(contentLength) : 0;
-                let loaded = 0;
-
-                const reader = response.body.getReader();
-                const chunks = [];
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    chunks.push(value);
-                    loaded += value.length;
-
-                    if (total > 0) {
-                        const percent = Math.round((loaded / total) * 100);
-                        updateProgress(percent, `下载中: ${formatSize(loaded)} / ${formatSize(total)} (${percent}%)`);
-                    } else {
-                        updateProgress(50, `下载中: ${formatSize(loaded)}`);
-                    }
-                }
-
-                const blob = new Blob(chunks);
-                triggerDownload(blob, fileName);
-                updateProgress(100, '下载完成!');
-                showStatus(`下载成功! 文件: ${fileName} (${formatSize(loaded)})`, 'success');
-            } catch (error) {
-                showProgress(false);
-                if (error.message.includes('Failed to fetch')) {
-                    showStatus('无法连接到代理服务器。请确保后端服务已启动 (node server.js)', 'error');
-                } else {
-                    showStatus('下载失败: ' + error.message, 'error');
-                }
-            }
-        }
-
-        function triggerDownload(blob, fileName) {
+        function triggerBlobDownload(blob, fileName) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -473,6 +471,54 @@
             if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
             if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
             return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        }
+
+        // Download history management using localStorage
+        function saveHistory(url, fileName) {
+            try {
+                let history = JSON.parse(localStorage.getItem('videoDownloadHistory') || '[]');
+                // Remove duplicate
+                history = history.filter(item => item.url !== url);
+                // Add to front
+                history.unshift({ url: url, fileName: fileName, time: new Date().toLocaleString() });
+                // Keep max 20 items
+                if (history.length > 20) history = history.slice(0, 20);
+                localStorage.setItem('videoDownloadHistory', JSON.stringify(history));
+                loadHistory();
+            } catch (e) {}
+        }
+
+        function loadHistory() {
+            try {
+                const history = JSON.parse(localStorage.getItem('videoDownloadHistory') || '[]');
+                const container = document.getElementById('historyList');
+                if (history.length === 0) {
+                    container.innerHTML = '<div class="history-empty">暂无下载记录</div>';
+                    return;
+                }
+                container.innerHTML = history.map(item =>
+                    '<div class="history-item" onclick="reuseUrl(\'' + escapeHtml(item.url) + '\')">' +
+                    '<span class="url-text" title="' + escapeHtml(item.url) + '">' + escapeHtml(item.url) + '</span>' +
+                    '</div>'
+                ).join('');
+            } catch (e) {
+                document.getElementById('historyList').innerHTML = '<div class="history-empty">暂无下载记录</div>';
+            }
+        }
+
+        function clearHistory() {
+            localStorage.removeItem('videoDownloadHistory');
+            loadHistory();
+        }
+
+        function reuseUrl(url) {
+            document.getElementById('videoUrl').value = url;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
         }
     </script>
 </body>
