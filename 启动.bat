@@ -1,43 +1,49 @@
 @echo off
-chcp 65001 >nul 2>&1
-title 视频下载工具
+title Video Download Tool
 
 echo.
 echo ==========================================
-echo   全网视频下载工具 - 一键启动
+echo   Video Download Tool
 echo ==========================================
 echo.
 
 :: Check if Node.js is installed
 where node >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [错误] 未检测到 Node.js！
-    echo.
-    echo 请先安装 Node.js:
-    echo   下载地址: https://nodejs.org/zh-cn
-    echo   选择 "LTS" 版本下载安装即可
-    echo.
-    echo 安装完成后重新双击此文件启动。
-    echo.
-    pause
-    exit /b 1
-)
+if %errorlevel% neq 0 goto NONODE
 
-echo [OK] Node.js 已安装
+echo [OK] Node.js found
 echo.
-echo 正在启动服务器...
-echo 启动后会自动下载所需组件（首次启动需要等待）
+echo Starting server...
+echo (First launch will download required components, please wait)
 echo.
 echo ==========================================
-echo   启动后请在浏览器中打开:
+echo   Open in browser:
 echo   http://localhost:3000
 echo ==========================================
 echo.
 
 node server.js
+if %errorlevel% neq 0 goto SERVERFAIL
+goto END
 
-if %errorlevel% neq 0 (
-    echo.
-    echo [错误] 服务器启动失败
-    pause
-)
+:NONODE
+echo.
+echo [ERROR] Node.js is NOT installed!
+echo.
+echo Please install Node.js first:
+echo   Download: https://nodejs.org/zh-cn
+echo   Choose the "LTS" version, install with defaults
+echo.
+echo After installation, double-click this file again to start.
+echo.
+pause
+goto END
+
+:SERVERFAIL
+echo.
+echo [ERROR] Server failed to start. Check error messages above.
+echo.
+pause
+goto END
+
+:END
