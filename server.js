@@ -144,40 +144,214 @@ async function ensureYtdlp() {
     return false;
 }
 
-// ========== Video Info & Download ==========
+// ========== URL Normalization ==========
 
-// Get video info using yt-dlp
-function getVideoInfo(videoUrl) {
-    return new Promise((resolve, reject) => {
-        const args = [
-            '--dump-json',
-            '--no-playlist',
-            '--no-warnings',
-            videoUrl
-        ];
+// Normalize video URLs so yt-dlp can recognize them
+function normalizeUrl(url) {
+    try {
+        const parsed = new URL(url);
         
-        execFile(ytdlpBinary, args, { 
+        // Douyin: convert modal_id URLs to proper video URLs
+        // e.g. https://www.douyin.com/jingxuan?modal_id=123 -> https://www.douyin.com/video/123
+        // e.g. https://www.douyin.com/discover?modal_id=123 -> https://www.douyin.com/video/123
+        // e.g. https://www.douyin.com/search/xxx?modal_id=123 -> https://www.douyin.com/video/123
+        if (parsed.hostname === 'www.douyin.com' || parsed.hostname === 'douyin.com') {
+            const modalId = parsed.searchParams.get('modal_id');
+            if (modalId && /^\d+$/.test(modalId)) {
+                const normalizedUrl = `https://www.douyin.com/video/${modalId}`;
+                console.log(`[URL] Normalized Douyin URL: ${url} -> ${normalizedUrl}`);
+                return normalizedUrl;
+            }
+        }
+        
+        // Bilibili: convert various URL formats
+        // e.g. https://www.bilibili.com/video/BV1xx411c7mD?p=1 (keep as-is, yt-dlp handles it)
+        // e.g. https://b23.tv/xxxxx (short link, keep as-is, yt-dlp follows redirects)
+        
+        // Kuaishou: convert various formats
+        // e.g. https://www.kuaishou.com/short-video/xxx?modal_id=xxx
+        if (parsed.hostname === 'www.kuaishou.com' || parsed.hostname === 'kuaishou.com') {
+            const modalId = parsed.searchParams.get('modal_id');
+            if (modalId) {
+                const normalizedUrl = `https://www.kuaishou.com/short-video/${modalId}`;
+                console.log(`[URL] Normalized Kuaishou URL: ${url} -> ${normalizedUrl}`);
+                return normalizedUrl;
+            }
+        }
+        
+        return url;
+    } catch (e) {
+        return url;
+    }
+}
+
+// ========== Cookie Management ==========
+
+const COOKIES_FILE = path.join(__dirname, 'cookies.txt');
+
+// Detect available browsers for cookie extraction
+function getAvailableBrowsers() {
+    // On Windows, try these browsers in order of likelihood to work
+    // Firefox doesn't have DPAPI encryption issues
+    return ['firefox', 'chrome', 'edge', 'chromium', 'opera', 'brave'];
+}
+
+// Build yt-dlp args with cookie support
+function buildCookieArgs() {
+    // Priority 1: cookies.txt file in project directory
+    if (fs.existsSync(COOKIES_FILE)) {
+        console.log('[Cookie] Using cookies.txt file');
+        return ['--cookies', COOKIES_FILE];
+    }
+    
+    // Priority 2: Try to use browser cookies
+    // Note: On Windows with newer Chrome/Edge, DPAPI may prevent access
+    // Firefox usually works without issues
+    const browsers = getAvailableBrowsers();
+    for (const browser of browsers) {
+        // We'll try firefox first as it doesn't have DPAPI issues
+        if (browser === 'firefox') {
+            return ['--cookies-from-browser', 'firefox'];
+        }
+    }
+    
+    return [];
+}
+
+// Try running yt-dlp with different cookie strategies
+async function runYtdlpWithCookies(baseArgs, videoUrl) {
+    const strategies = [];
+    
+    // Strategy 1: cookies.txt file (if exists)
+    if (fs.existsSync(COOKIES_FILE)) {
+        strategies.push({
+            name: 'cookies.txt',
+            args: [...baseArgs, '--cookies', COOKIES_FILE, videoUrl]
+        });
+    }
+    
+    // Strategy 2: Firefox cookies (most reliable on Windows)
+    strategies.push({
+        name: 'firefox cookies',
+        args: [...baseArgs, '--cookies-from-browser', 'firefox', videoUrl]
+    });
+    
+    // Strategy 3: Chrome cookies
+    strategies.push({
+        name: 'chrome cookies',
+        args: [...baseArgs, '--cookies-from-browser', 'chrome', videoUrl]
+    });
+    
+    // Strategy 4: Edge cookies
+    strategies.push({
+        name: 'edge cookies',
+        args: [...baseArgs, '--cookies-from-browser', 'edge', videoUrl]
+    });
+    
+    // Strategy 5: No cookies (works for sites that don't require them)
+    strategies.push({
+        name: 'no cookies',
+        args: [...baseArgs, videoUrl]
+    });
+    
+    let lastError = null;
+    
+    for (const strategy of strategies) {
+        try {
+            const result = await executeYtdlp(strategy.args);
+            console.log(`[Cookie] Success with strategy: ${strategy.name}`);
+            return result;
+        } catch (err) {
+            lastError = err;
+            const errMsg = err.message || '';
+            // If the error is "cookies needed", try next strategy
+            // If it's a different error (like network), also try next
+            // But if it's "Unsupported URL", no point trying other cookie strategies
+            if (errMsg.includes('Unsupported URL') || errMsg.includes('is not a valid URL')) {
+                throw err; // No cookie strategy will fix an invalid URL
+            }
+            console.log(`[Cookie] Strategy "${strategy.name}" failed: ${errMsg.substring(0, 100)}`);
+            continue;
+        }
+    }
+    
+    throw lastError || new Error('All cookie strategies failed');
+}
+
+function executeYtdlp(args) {
+    return new Promise((resolve, reject) => {
+        execFile(ytdlpBinary, args, {
             timeout: 60000,
             maxBuffer: 10 * 1024 * 1024,
             env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' }
         }, (error, stdout, stderr) => {
             if (error) {
-                // Try to extract meaningful error message
                 const errMsg = stderr || error.message;
-                return reject(new Error(`Failed to parse video: ${errMsg.substring(0, 200)}`));
+                return reject(new Error(errMsg.substring(0, 500)));
             }
-            try {
-                const info = JSON.parse(stdout);
-                resolve(info);
-            } catch (e) {
-                reject(new Error('Failed to parse video info'));
-            }
+            resolve(stdout);
         });
     });
 }
 
+// ========== Video Info & Download ==========
+
+// Friendly error messages in Chinese
+function friendlyError(errMsg) {
+    if (errMsg.includes('Fresh cookies') || errMsg.includes('cookies')) {
+        return '该网站需要浏览器Cookie才能解析视频。\n\n解决方法：\n1. 用Firefox浏览器访问并登录该视频网站\n2. 重新尝试解析\n\n或者：安装浏览器扩展"Get cookies.txt LOCALLY"，导出cookies.txt文件放到程序目录下，重启程序即可。';
+    }
+    if (errMsg.includes('Unsupported URL')) {
+        return '不支持该链接格式。请确认链接是否正确，或尝试复制视频页面的完整URL。';
+    }
+    if (errMsg.includes('Video unavailable') || errMsg.includes('not available')) {
+        return '视频不可用，可能已被删除或设为私密。';
+    }
+    if (errMsg.includes('403') || errMsg.includes('Forbidden')) {
+        return '访问被拒绝，该视频可能需要登录或有地区限制。';
+    }
+    if (errMsg.includes('404') || errMsg.includes('Not Found')) {
+        return '视频不存在，请检查链接是否正确。';
+    }
+    if (errMsg.includes('timed out') || errMsg.includes('timeout')) {
+        return '连接超时，请检查网络连接后重试。';
+    }
+    if (errMsg.includes('DPAPI')) {
+        return '无法读取浏览器Cookie（Windows安全限制）。\n\n解决方法：安装Firefox浏览器，用Firefox访问并登录该视频网站后重试。\n\n或者：安装浏览器扩展"Get cookies.txt LOCALLY"，导出cookies.txt文件放到程序目录下。';
+    }
+    return errMsg;
+}
+
+// Get video info using yt-dlp
+async function getVideoInfo(videoUrl) {
+    // Normalize the URL first
+    videoUrl = normalizeUrl(videoUrl);
+    
+    const baseArgs = [
+        '--dump-json',
+        '--no-playlist',
+        '--no-warnings'
+    ];
+    
+    try {
+        const stdout = await runYtdlpWithCookies(baseArgs, videoUrl);
+        try {
+            const info = JSON.parse(stdout);
+            return info;
+        } catch (e) {
+            throw new Error('Failed to parse video info');
+        }
+    } catch (error) {
+        const errMsg = error.message || 'Unknown error';
+        throw new Error(friendlyError(errMsg));
+    }
+}
+
 // Download video using yt-dlp and stream to response
 function downloadVideo(videoUrl, formatId, res) {
+    // Normalize the URL first
+    videoUrl = normalizeUrl(videoUrl);
+    
     const filename = `video_${Date.now()}`;
     const outputTemplate = path.join(DOWNLOAD_DIR, `${filename}.%(ext)s`);
     
@@ -187,6 +361,14 @@ function downloadVideo(videoUrl, formatId, res) {
         '--no-warnings',
         '--newline', // Progress on new lines
     ];
+    
+    // Add cookie support
+    if (fs.existsSync(COOKIES_FILE)) {
+        args.push('--cookies', COOKIES_FILE);
+    } else {
+        // Try firefox cookies by default (most reliable on Windows)
+        args.push('--cookies-from-browser', 'firefox');
+    }
     
     if (formatId && formatId !== 'best') {
         args.push('-f', formatId);
@@ -410,6 +592,7 @@ async function handleDownload(req, res) {
 // API: Check yt-dlp status
 function handleStatus(req, res) {
     const ready = fs.existsSync(ytdlpBinary);
+    const hasCookies = fs.existsSync(COOKIES_FILE);
     res.writeHead(200, { 
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
@@ -418,9 +601,48 @@ function handleStatus(req, res) {
         ready: ready,
         downloading: ytdlpDownloading,
         error: ytdlpDownloadError,
+        hasCookies: hasCookies,
         platform: os.platform(),
         arch: os.arch()
     }));
+}
+
+// API: Upload cookies.txt file
+async function handleUploadCookies(req, res) {
+    try {
+        let body = '';
+        await new Promise((resolve, reject) => {
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', resolve);
+            req.on('error', reject);
+        });
+        
+        // Parse multipart or raw text
+        let cookieContent = body;
+        
+        // If it's JSON with a content field
+        try {
+            const json = JSON.parse(body);
+            if (json.content) cookieContent = json.content;
+        } catch (e) {
+            // Not JSON, use raw body as cookie content
+        }
+        
+        if (!cookieContent || cookieContent.trim().length === 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+            res.end(JSON.stringify({ error: 'Empty cookie content' }));
+            return;
+        }
+        
+        fs.writeFileSync(COOKIES_FILE, cookieContent, 'utf-8');
+        console.log('[Cookie] cookies.txt file saved successfully');
+        
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ success: true, message: 'Cookies saved successfully' }));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ error: error.message }));
+    }
 }
 
 // Create HTTP server
@@ -454,6 +676,11 @@ const server = http.createServer(async (req, res) => {
 
     if (parsedUrl === '/api/status' && req.method === 'GET') {
         handleStatus(req, res);
+        return;
+    }
+
+    if (parsedUrl === '/api/upload-cookies' && req.method === 'POST') {
+        await handleUploadCookies(req, res);
         return;
     }
 
