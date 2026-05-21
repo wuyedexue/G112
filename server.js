@@ -185,6 +185,217 @@ function normalizeUrl(url) {
     }
 }
 
+// ========== Direct Parsers (no yt-dlp needed) ==========
+
+// Fetch a URL and return the response body as string
+function httpGet(url, options = {}) {
+    return new Promise((resolve, reject) => {
+        const client = url.startsWith('https') ? https : http;
+        const headers = options.headers || {};
+        const parsedUrl = new URL(url);
+        
+        const reqOptions = {
+            hostname: parsedUrl.hostname,
+            path: parsedUrl.pathname + parsedUrl.search,
+            port: parsedUrl.port,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+                ...headers
+            },
+            timeout: options.timeout || 15000
+        };
+        
+        const req = client.get(reqOptions, (res) => {
+            if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
+                const location = res.headers.location;
+                if (!location) return reject(new Error('Redirect without location'));
+                const absoluteUrl = location.startsWith('http') ? location : new URL(location, url).toString();
+                const remaining = (options.maxRedirects || 5) - 1;
+                if (remaining <= 0) return reject(new Error('Too many redirects'));
+                return httpGet(absoluteUrl, { ...options, maxRedirects: remaining }).then(resolve).catch(reject);
+            }
+            if (res.statusCode !== 200) {
+                return reject(new Error(`HTTP ${res.statusCode}`));
+            }
+            let data = '';
+            res.setEncoding('utf8');
+            res.on('data', chunk => { data += chunk; });
+            res.on('end', () => resolve(data));
+            res.on('error', reject);
+        });
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
+    });
+}
+
+// Direct Douyin parser - works without cookies
+async function douyinDirectParse(videoId) {
+    console.log(`[Douyin] Direct parsing video ID: ${videoId}`);
+    
+    const shareUrl = `https://www.iesdouyin.com/share/video/${videoId}`;
+    const html = await httpGet(shareUrl, {
+        headers: {
+            'Referer': 'https://www.douyin.com/',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9'
+        },
+        timeout: 15000
+    });
+    
+    // Extract _ROUTER_DATA JSON from the page
+    const routerDataMatch = html.match(/window\._ROUTER_DATA\s*=\s*({.+?})\s*<\/script>/s);
+    if (!routerDataMatch) {
+        throw new Error('无法从抖音页面提取视频数据，页面结构可能已变化');
+    }
+    
+    let routerData;
+    try {
+        routerData = JSON.parse(routerDataMatch[1]);
+    } catch (e) {
+        throw new Error('解析抖音视频数据失败');
+    }
+    
+    // Navigate to the video info
+    const loaderData = routerData.loaderData || {};
+    let pageData = null;
+    
+    for (const key of Object.keys(loaderData)) {
+        if (key.includes('video_') && loaderData[key] && loaderData[key].videoInfoRes) {
+            pageData = loaderData[key];
+            break;
+        }
+    }
+    
+    if (!pageData || !pageData.videoInfoRes) {
+        throw new Error('未找到视频信息，视频可能已被删除');
+    }
+    
+    const itemList = pageData.videoInfoRes.item_list;
+    if (!itemList || itemList.length === 0) {
+        throw new Error('视频列表为空，视频可能不存在或已被下架');
+    }
+    
+    const item = itemList[0];
+    const video = item.video || {};
+    const playAddr = video.play_addr || {};
+    const playUrlList = playAddr.url_list || [];
+    
+    if (playUrlList.length === 0) {
+        throw new Error('未找到视频播放地址');
+    }
+    
+    const basePlayUrl = playUrlList[0];
+    const videoWidth = video.width || 1920;
+    const videoHeight = video.height || 1080;
+    
+    // Generate no-watermark URL by replacing /playwm/ with /play/
+    const noWmUrl = basePlayUrl.replace('/playwm/', '/play/');
+    
+    // Generate multiple quality options by changing ratio parameter
+    const qualities = [
+        { ratio: '1080p', label: '1080p', width: 1920, height: 1080 },
+        { ratio: '720p', label: '720p', width: 1280, height: 720 },
+        { ratio: '540p', label: '540p', width: 960, height: 540 },
+        { ratio: '360p', label: '360p', width: 640, height: 360 }
+    ];
+    
+    const formats = [];
+    
+    for (const q of qualities) {
+        // Replace ratio in URL to get different qualities
+        const qualityUrl = noWmUrl.replace(/ratio=\w+/, `ratio=${q.ratio}`);
+        formats.push({
+            format_id: `douyin_${q.ratio}`,
+            ext: 'mp4',
+            resolution: `${q.width}x${q.height}`,
+            filesize: null,
+            vcodec: 'h264',
+            acodec: 'aac',
+            fps: null,
+            tbr: null,
+            format_note: `${q.label} (无水印)`,
+            url: qualityUrl
+        });
+    }
+    
+    // Also add original watermarked URL as fallback
+    formats.push({
+        format_id: 'douyin_original_wm',
+        ext: 'mp4',
+        resolution: `${videoWidth}x${videoHeight}`,
+        filesize: null,
+        vcodec: 'h264',
+        acodec: 'aac',
+        fps: null,
+        tbr: null,
+        format_note: '原始 (带水印)',
+        url: basePlayUrl
+    });
+    
+    // Get cover image
+    const cover = video.cover || video.origin_cover || null;
+    let thumbnail = null;
+    if (cover && cover.url_list && cover.url_list.length > 0) {
+        thumbnail = cover.url_list[0];
+    }
+    
+    const duration = video.duration ? Math.round(video.duration / 1000) : 0;
+    
+    const result = {
+        title: item.desc || 'Douyin Video',
+        duration: duration,
+        thumbnail: thumbnail,
+        uploader: item.author ? item.author.nickname : '',
+        webpage_url: `https://www.douyin.com/video/${videoId}`,
+        description: item.desc || '',
+        formats: formats,
+        _directParse: true
+    };
+    
+    console.log(`[Douyin] Direct parse success: "${result.title.substring(0, 40)}..." (${formats.length} formats, duration: ${duration}s)`);
+    return result;
+}
+
+// Extract video ID from various Douyin URL formats
+function extractDouyinVideoId(url) {
+    try {
+        const parsed = new URL(url);
+        if (parsed.hostname === 'www.douyin.com' || parsed.hostname === 'douyin.com') {
+            // Format: /video/ID
+            const videoMatch = parsed.pathname.match(/\/video\/(\d+)/);
+            if (videoMatch) return videoMatch[1];
+            
+            // Format: ?modal_id=ID (from jingxuan, discover, search pages)
+            const modalId = parsed.searchParams.get('modal_id');
+            if (modalId && /^\d+$/.test(modalId)) return modalId;
+            
+            // Format: /note/ID
+            const noteMatch = parsed.pathname.match(/\/note\/(\d+)/);
+            if (noteMatch) return noteMatch[1];
+        }
+        
+        // Short links: v.douyin.com
+        if (parsed.hostname === 'v.douyin.com') {
+            const shortMatch = parsed.pathname.match(/\/(\w+)/);
+            if (shortMatch) return null; // Short links need redirect resolution
+        }
+        
+        return null;
+    } catch (e) {
+        return null;
+    }
+}
+
+// Check if a URL is a Douyin URL
+function isDouyinUrl(url) {
+    try {
+        const parsed = new URL(url);
+        return ['www.douyin.com', 'douyin.com', 'v.douyin.com', 'www.iesdouyin.com'].includes(parsed.hostname);
+    } catch (e) {
+        return false;
+    }
+}
+
 // ========== Cookie Management ==========
 
 const COOKIES_FILE = path.join(__dirname, 'cookies.txt');
@@ -322,10 +533,23 @@ function friendlyError(errMsg) {
     return errMsg;
 }
 
-// Get video info using yt-dlp
+// Get video info using yt-dlp (with direct parser fallback for supported sites)
 async function getVideoInfo(videoUrl) {
     // Normalize the URL first
     videoUrl = normalizeUrl(videoUrl);
+    
+    // For Douyin: try direct parser first (no cookies needed, faster)
+    if (isDouyinUrl(videoUrl)) {
+        const videoId = extractDouyinVideoId(videoUrl);
+        if (videoId) {
+            try {
+                return await douyinDirectParse(videoId);
+            } catch (directErr) {
+                console.log(`[Parse] Douyin direct parse failed: ${directErr.message}, falling back to yt-dlp`);
+                // Fall through to yt-dlp
+            }
+        }
+    }
     
     const baseArgs = [
         '--dump-json',
@@ -497,20 +721,37 @@ async function handleParse(req, res) {
         
         const info = await getVideoInfo(videoUrl);
         
-        // Extract relevant info
-        const formats = (info.formats || [])
-            .filter(f => f.vcodec !== 'none' || f.acodec !== 'none')
-            .map(f => ({
+        // Extract relevant info - handle both direct parse and yt-dlp results
+        let formats;
+        if (info._directParse) {
+            // Direct parser results already have url field
+            formats = (info.formats || []).map(f => ({
                 format_id: f.format_id,
                 ext: f.ext,
-                resolution: f.resolution || (f.height ? `${f.width || '?'}x${f.height}` : 'audio only'),
-                filesize: f.filesize || f.filesize_approx || null,
+                resolution: f.resolution || 'unknown',
+                filesize: f.filesize || null,
                 vcodec: f.vcodec,
                 acodec: f.acodec,
                 fps: f.fps,
                 tbr: f.tbr,
-                format_note: f.format_note || ''
+                format_note: f.format_note || '',
+                url: f.url || null  // Direct download URL
             }));
+        } else {
+            formats = (info.formats || [])
+                .filter(f => f.vcodec !== 'none' || f.acodec !== 'none')
+                .map(f => ({
+                    format_id: f.format_id,
+                    ext: f.ext,
+                    resolution: f.resolution || (f.height ? `${f.width || '?'}x${f.height}` : 'audio only'),
+                    filesize: f.filesize || f.filesize_approx || null,
+                    vcodec: f.vcodec,
+                    acodec: f.acodec,
+                    fps: f.fps,
+                    tbr: f.tbr,
+                    format_note: f.format_note || ''
+                }));
+        }
 
         const result = {
             title: info.title || 'Unknown',
@@ -519,7 +760,8 @@ async function handleParse(req, res) {
             uploader: info.uploader || info.channel || '',
             webpage_url: info.webpage_url || videoUrl,
             description: (info.description || '').substring(0, 200),
-            formats: formats
+            formats: formats,
+            directParse: !!info._directParse
         };
 
         res.writeHead(200, { 
@@ -544,10 +786,18 @@ async function handleDownload(req, res) {
         const body = await parseBody(req);
         const videoUrl = body.url;
         const formatId = body.format || 'best';
+        const directUrl = body.directUrl; // Direct URL from direct parser
 
-        if (!videoUrl) {
+        if (!videoUrl && !directUrl) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Missing url parameter' }));
+            return;
+        }
+
+        // If we have a direct URL (from Douyin direct parser), proxy download it
+        if (directUrl) {
+            console.log(`[Download] Direct proxy download: ${directUrl.substring(0, 80)}...`);
+            await proxyDownloadDirect(directUrl, videoUrl, res);
             return;
         }
 
@@ -587,6 +837,90 @@ async function handleDownload(req, res) {
             res.end(JSON.stringify({ error: error.message }));
         }
     }
+}
+
+// Proxy download a direct video URL (for Douyin etc.)
+function proxyDownloadDirect(directUrl, refererUrl, res) {
+    return new Promise((resolve, reject) => {
+        const client = directUrl.startsWith('https') ? https : http;
+        const parsedUrl = new URL(directUrl);
+        
+        const reqOptions = {
+            hostname: parsedUrl.hostname,
+            path: parsedUrl.pathname + parsedUrl.search,
+            port: parsedUrl.port,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+                'Referer': refererUrl || 'https://www.douyin.com/',
+                'Accept': '*/*'
+            },
+            timeout: 60000
+        };
+        
+        const proxyReq = client.get(reqOptions, (proxyRes) => {
+            // Follow redirects
+            if ([301, 302, 303, 307, 308].includes(proxyRes.statusCode)) {
+                const location = proxyRes.headers.location;
+                if (location) {
+                    const absoluteUrl = location.startsWith('http') ? location : new URL(location, directUrl).toString();
+                    proxyDownloadDirect(absoluteUrl, refererUrl, res).then(resolve).catch(reject);
+                    return;
+                }
+            }
+            
+            if (proxyRes.statusCode !== 200) {
+                if (!res.headersSent) {
+                    res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+                    res.end(JSON.stringify({ error: `Video server returned HTTP ${proxyRes.statusCode}` }));
+                }
+                reject(new Error(`HTTP ${proxyRes.statusCode}`));
+                return;
+            }
+            
+            const contentLength = proxyRes.headers['content-length'];
+            const contentType = proxyRes.headers['content-type'] || 'video/mp4';
+            const fileName = `video_${Date.now()}.mp4`;
+            
+            const headers = {
+                'Content-Type': contentType,
+                'Content-Disposition': `attachment; filename="${fileName}"`,
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Expose-Headers': 'X-File-Name, X-File-Size, Content-Disposition',
+                'X-File-Name': fileName
+            };
+            if (contentLength) {
+                headers['Content-Length'] = contentLength;
+                headers['X-File-Size'] = contentLength;
+            }
+            
+            res.writeHead(200, headers);
+            proxyRes.pipe(res);
+            proxyRes.on('end', () => resolve());
+            proxyRes.on('error', (err) => {
+                if (!res.headersSent) {
+                    res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+                    res.end(JSON.stringify({ error: err.message }));
+                }
+                reject(err);
+            });
+        });
+        
+        proxyReq.on('error', (err) => {
+            if (!res.headersSent) {
+                res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+                res.end(JSON.stringify({ error: `Download failed: ${err.message}` }));
+            }
+            reject(err);
+        });
+        proxyReq.on('timeout', () => {
+            proxyReq.destroy();
+            if (!res.headersSent) {
+                res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+                res.end(JSON.stringify({ error: 'Download timed out' }));
+            }
+            reject(new Error('Download timed out'));
+        });
+    });
 }
 
 // API: Check yt-dlp status

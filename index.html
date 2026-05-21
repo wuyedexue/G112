@@ -558,6 +558,8 @@
     <script>
         let currentVideoUrl = '';
         let selectedFormat = 'best';
+        let selectedDirectUrl = null;
+        let currentDirectParse = false;
         let videoFormats = [];
 
         function showStatus(message, type) {
@@ -660,6 +662,9 @@
             document.getElementById('videoUploader').textContent = info.uploader ? '上传者: ' + info.uploader : '';
             document.getElementById('videoDuration').textContent = info.duration ? '时长: ' + formatDuration(info.duration) : '';
 
+            // Store whether this was a direct parse
+            currentDirectParse = !!info.directParse;
+
             // Display formats
             videoFormats = info.formats || [];
             const formatList = document.getElementById('formatList');
@@ -668,9 +673,7 @@
             const videoFormatsFiltered = videoFormats
                 .filter(f => f.vcodec && f.vcodec !== 'none')
                 .sort((a, b) => {
-                    // Sort by resolution (height) descending
-                    const hA = parseInt(f => f.resolution) || 0;
-                    const hB = parseInt(f => f.resolution) || 0;
+                    // Sort by bitrate descending
                     return (b.tbr || 0) - (a.tbr || 0);
                 });
 
@@ -684,7 +687,8 @@
                 resolution: '最佳画质',
                 ext: 'mp4',
                 filesize: null,
-                format_note: '自动选择最高画质'
+                format_note: '自动选择最高画质',
+                url: videoFormatsFiltered.length > 0 ? videoFormatsFiltered[0].url : null
             });
 
             for (const f of videoFormatsFiltered) {
@@ -697,13 +701,14 @@
 
             formatList.innerHTML = displayFormats.map((f, idx) => `
                 <div class="format-item ${idx === 0 ? 'selected' : ''}" 
-                     onclick="selectFormat('${f.format_id}', this)">
+                     onclick="selectFormat('${f.format_id}', this)" data-url="${f.url || ''}">
                     <div class="format-res">${f.resolution} ${f.ext ? '(' + f.ext + ')' : ''}</div>
                     <div class="format-detail">${f.format_note || ''} ${f.filesize ? formatSize(f.filesize) : ''}</div>
                 </div>
             `).join('');
 
             selectedFormat = 'best';
+            selectedDirectUrl = displayFormats[0].url || null;
             showStatus('解析成功! 请选择画质后点击下载', 'success');
         }
 
@@ -711,6 +716,7 @@
             document.querySelectorAll('.format-item').forEach(item => item.classList.remove('selected'));
             el.classList.add('selected');
             selectedFormat = formatId;
+            selectedDirectUrl = el.getAttribute('data-url') || null;
         }
 
         async function downloadVideo() {
@@ -739,7 +745,11 @@
                 const response = await fetch('/api/download', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: currentVideoUrl, format: selectedFormat })
+                    body: JSON.stringify({ 
+                        url: currentVideoUrl, 
+                        format: selectedFormat,
+                        directUrl: selectedDirectUrl || undefined
+                    })
                 });
 
                 clearInterval(progressInterval);
