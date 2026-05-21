@@ -724,16 +724,29 @@
 
         // Check server status on load
         document.addEventListener('DOMContentLoaded', async () => {
+            checkStatus();
+        });
+
+        async function checkStatus() {
             try {
                 const res = await fetch('/api/status');
                 const data = await res.json();
                 if (!data.ready) {
-                    showStatus('yt-dlp 尚未准备就绪，服务器正在下载必要组件，请稍后刷新页面重试...', 'warning');
+                    if (data.downloading) {
+                        showStatus('yt-dlp 组件正在下载中（首次启动需要下载约30MB），请稍等片刻...<br><small>页面会每5秒自动检查，下载完成后即可使用</small>', 'warning');
+                        // Poll every 5 seconds
+                        setTimeout(checkStatus, 5000);
+                    } else if (data.error) {
+                        showStatus('yt-dlp 下载失败: ' + data.error + '<br><small>可能是网络问题，请尝试：<br>1. 重启程序自动重试<br>2. 手动下载 yt-dlp.exe 放入 bin/ 文件夹<br>下载地址: https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe</small>', 'error');
+                    } else {
+                        showStatus('yt-dlp 尚未准备就绪，请稍后刷新页面重试...', 'warning');
+                        setTimeout(checkStatus, 5000);
+                    }
                 }
             } catch (e) {
                 showStatus('无法连接到服务器，请确认服务器已启动', 'error');
             }
-        });
+        }
     </script>
 
     <style>

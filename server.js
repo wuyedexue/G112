@@ -30,38 +30,52 @@ const MIME_TYPES = {
 
 // ========== yt-dlp Setup ==========
 
-function getYtdlpDownloadUrl() {
+// Track yt-dlp download status for the frontend
+let ytdlpDownloading = false;
+let ytdlpDownloadError = null;
+
+function getYtdlpDownloadUrls() {
     const platform = os.platform();
     const arch = os.arch();
-    const base = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/';
     
+    let filename;
     if (platform === 'win32') {
-        return base + 'yt-dlp.exe';
+        filename = 'yt-dlp.exe';
     } else if (platform === 'darwin') {
-        return base + 'yt-dlp_macos';
+        filename = 'yt-dlp_macos';
     } else {
-        // Linux
         if (arch === 'arm64' || arch === 'aarch64') {
-            return base + 'yt-dlp_linux_aarch64';
+            filename = 'yt-dlp_linux_aarch64';
+        } else {
+            filename = 'yt-dlp_linux';
         }
-        return base + 'yt-dlp_linux';
     }
+
+    const githubUrl = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${filename}`;
+    
+    // Multiple mirrors for users in China where GitHub is slow/blocked
+    return [
+        `https://ghfast.top/${githubUrl}`,
+        `https://gh-proxy.com/${githubUrl}`,
+        `https://github.moeyy.xyz/${githubUrl}`,
+        githubUrl
+    ];
 }
 
-function downloadFile(url, dest, maxRedirects = 10) {
+function downloadFile(url, dest, timeoutMs = 30000, maxRedirects = 10) {
     return new Promise((resolve, reject) => {
         if (maxRedirects <= 0) return reject(new Error('Too many redirects'));
         
         const client = url.startsWith('https') ? https : http;
-        client.get(url, { 
+        const req = client.get(url, { 
             headers: { 'User-Agent': 'Mozilla/5.0' },
-            timeout: 60000
+            timeout: timeoutMs
         }, (res) => {
             if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
                 const location = res.headers.location;
                 if (!location) return reject(new Error('Redirect without location'));
                 const absoluteUrl = location.startsWith('http') ? location : new URL(location, url).toString();
-                return downloadFile(absoluteUrl, dest, maxRedirects - 1).then(resolve).catch(reject);
+                return downloadFile(absoluteUrl, dest, timeoutMs, maxRedirects - 1).then(resolve).catch(reject);
             }
             if (res.statusCode !== 200) {
                 return reject(new Error(`HTTP ${res.statusCode}`));
@@ -81,7 +95,12 @@ function downloadFile(url, dest, maxRedirects = 10) {
                 fs.unlink(dest, () => {});
                 reject(err);
             });
-        }).on('error', reject);
+        });
+        req.on('error', reject);
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error(`Download timed out after ${timeoutMs / 1000}s`));
+        });
     });
 }
 
@@ -89,20 +108,38 @@ async function ensureYtdlp() {
     if (fs.existsSync(ytdlpBinary)) {
         return true;
     }
+    
+    ytdlpDownloading = true;
+    ytdlpDownloadError = null;
+    
+    const urls = getYtdlpDownloadUrls();
     console.log('[Setup] yt-dlp not found, downloading...');
-    const url = getYtdlpDownloadUrl();
-    console.log(`[Setup] Downloading from: ${url}`);
-    try {
-        await downloadFile(url, ytdlpBinary);
-        console.log('[Setup] yt-dlp downloaded successfully!');
-        return true;
-    } catch (err) {
-        console.error(`[Setup] Failed to download yt-dlp: ${err.message}`);
-        console.error('[Setup] Please download yt-dlp manually:');
-        console.error(`[Setup]   Windows: https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe`);
-        console.error(`[Setup]   Place it in: ${BIN_DIR}`);
-        return false;
+    
+    for (let i = 0; i < urls.length; i++) {
+        const url = urls[i];
+        console.log(`[Setup] Trying mirror ${i + 1}/${urls.length}: ${url}`);
+        try {
+            await downloadFile(url, ytdlpBinary, 60000);
+            console.log('[Setup] yt-dlp downloaded successfully!');
+            ytdlpDownloading = false;
+            return true;
+        } catch (err) {
+            console.error(`[Setup] Mirror ${i + 1} failed: ${err.message}`);
+            // Clean up partial file
+            try { fs.unlinkSync(ytdlpBinary); } catch (e) {}
+            if (i < urls.length - 1) {
+                console.log('[Setup] Trying next mirror...');
+            }
+        }
     }
+    
+    ytdlpDownloading = false;
+    ytdlpDownloadError = 'All download mirrors failed';
+    console.error('[Setup] Failed to download yt-dlp from all mirrors.');
+    console.error('[Setup] Please download yt-dlp manually:');
+    console.error(`[Setup]   Windows: https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe`);
+    console.error(`[Setup]   Place it in: ${BIN_DIR}`);
+    return false;
 }
 
 // ========== Video Info & Download ==========
@@ -377,6 +414,8 @@ function handleStatus(req, res) {
     });
     res.end(JSON.stringify({ 
         ready: ready,
+        downloading: ytdlpDownloading,
+        error: ytdlpDownloadError,
         platform: os.platform(),
         arch: os.arch()
     }));
@@ -427,20 +466,22 @@ async function main() {
     console.log('  Video Download Tool - yt-dlp Backend');
     console.log('==========================================\n');
 
-    // Check/download yt-dlp
+    // Start HTTP server FIRST so the page is accessible immediately
+    server.listen(PORT, () => {
+        console.log(`[OK] Server running at: http://localhost:${PORT}`);
+        console.log(`     Open this URL in your browser to use the tool.`);
+        console.log(`\n     Press Ctrl+C to stop.\n`);
+    });
+
+    // Then check/download yt-dlp in the background (non-blocking)
     const ready = await ensureYtdlp();
     if (!ready) {
-        console.error('\n[ERROR] yt-dlp is not available. The tool will not work without it.');
-        console.error('[ERROR] Please download yt-dlp manually and place it in the bin/ folder.\n');
+        console.error('\n[WARN] yt-dlp is not available. Video parsing will not work until it is installed.');
+        console.error('[WARN] You can manually download yt-dlp.exe and place it in the bin/ folder.');
+        console.error('[WARN] Download link: https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe\n');
     } else {
-        console.log('[OK] yt-dlp is ready.\n');
+        console.log('[OK] yt-dlp is ready. You can now parse and download videos.\n');
     }
-
-    server.listen(PORT, () => {
-        console.log(`  Server running at: http://localhost:${PORT}`);
-        console.log(`  Open this URL in your browser to use the tool.`);
-        console.log(`\n  Press Ctrl+C to stop.\n`);
-    });
 }
 
 main();
