@@ -2,9 +2,20 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const url = require('url');
+const { execFile, spawn } = require('child_process');
+const os = require('os');
 
 const PORT = process.env.PORT || 3000;
+const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
+const BIN_DIR = path.join(__dirname, 'bin');
+
+// Ensure directories exist
+if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
+if (!fs.existsSync(BIN_DIR)) fs.mkdirSync(BIN_DIR, { recursive: true });
+
+// yt-dlp binary path
+const isWindows = os.platform() === 'win32';
+const ytdlpBinary = path.join(BIN_DIR, isWindows ? 'yt-dlp.exe' : 'yt-dlp');
 
 // MIME types for static files
 const MIME_TYPES = {
@@ -17,18 +28,199 @@ const MIME_TYPES = {
     '.ico': 'image/x-icon'
 };
 
-// Allowed video content types
-const VIDEO_CONTENT_TYPES = [
-    'video/', 'application/octet-stream', 'binary/octet-stream',
-    'application/mp4', 'application/x-mpegURL', 'audio/', 'application/vnd'
-];
+// ========== yt-dlp Setup ==========
 
-function isAllowedContentType(contentType) {
-    if (!contentType) return true; // Allow if no content-type header
-    return VIDEO_CONTENT_TYPES.some(type => contentType.toLowerCase().includes(type));
+function getYtdlpDownloadUrl() {
+    const platform = os.platform();
+    const arch = os.arch();
+    const base = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/';
+    
+    if (platform === 'win32') {
+        return base + 'yt-dlp.exe';
+    } else if (platform === 'darwin') {
+        return base + 'yt-dlp_macos';
+    } else {
+        // Linux
+        if (arch === 'arm64' || arch === 'aarch64') {
+            return base + 'yt-dlp_linux_aarch64';
+        }
+        return base + 'yt-dlp_linux';
+    }
 }
 
-// Parse request body
+function downloadFile(url, dest, maxRedirects = 10) {
+    return new Promise((resolve, reject) => {
+        if (maxRedirects <= 0) return reject(new Error('Too many redirects'));
+        
+        const client = url.startsWith('https') ? https : http;
+        client.get(url, { 
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            timeout: 60000
+        }, (res) => {
+            if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
+                const location = res.headers.location;
+                if (!location) return reject(new Error('Redirect without location'));
+                const absoluteUrl = location.startsWith('http') ? location : new URL(location, url).toString();
+                return downloadFile(absoluteUrl, dest, maxRedirects - 1).then(resolve).catch(reject);
+            }
+            if (res.statusCode !== 200) {
+                return reject(new Error(`HTTP ${res.statusCode}`));
+            }
+            const file = fs.createWriteStream(dest);
+            res.pipe(file);
+            file.on('finish', () => {
+                file.close(() => {
+                    // Make executable on unix
+                    if (!isWindows) {
+                        fs.chmodSync(dest, '755');
+                    }
+                    resolve();
+                });
+            });
+            file.on('error', (err) => {
+                fs.unlink(dest, () => {});
+                reject(err);
+            });
+        }).on('error', reject);
+    });
+}
+
+async function ensureYtdlp() {
+    if (fs.existsSync(ytdlpBinary)) {
+        return true;
+    }
+    console.log('[Setup] yt-dlp not found, downloading...');
+    const url = getYtdlpDownloadUrl();
+    console.log(`[Setup] Downloading from: ${url}`);
+    try {
+        await downloadFile(url, ytdlpBinary);
+        console.log('[Setup] yt-dlp downloaded successfully!');
+        return true;
+    } catch (err) {
+        console.error(`[Setup] Failed to download yt-dlp: ${err.message}`);
+        console.error('[Setup] Please download yt-dlp manually:');
+        console.error(`[Setup]   Windows: https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe`);
+        console.error(`[Setup]   Place it in: ${BIN_DIR}`);
+        return false;
+    }
+}
+
+// ========== Video Info & Download ==========
+
+// Get video info using yt-dlp
+function getVideoInfo(videoUrl) {
+    return new Promise((resolve, reject) => {
+        const args = [
+            '--dump-json',
+            '--no-playlist',
+            '--no-warnings',
+            videoUrl
+        ];
+        
+        execFile(ytdlpBinary, args, { 
+            timeout: 60000,
+            maxBuffer: 10 * 1024 * 1024,
+            env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' }
+        }, (error, stdout, stderr) => {
+            if (error) {
+                // Try to extract meaningful error message
+                const errMsg = stderr || error.message;
+                return reject(new Error(`Failed to parse video: ${errMsg.substring(0, 200)}`));
+            }
+            try {
+                const info = JSON.parse(stdout);
+                resolve(info);
+            } catch (e) {
+                reject(new Error('Failed to parse video info'));
+            }
+        });
+    });
+}
+
+// Download video using yt-dlp and stream to response
+function downloadVideo(videoUrl, formatId, res) {
+    const filename = `video_${Date.now()}`;
+    const outputTemplate = path.join(DOWNLOAD_DIR, `${filename}.%(ext)s`);
+    
+    const args = [
+        '-o', outputTemplate,
+        '--no-playlist',
+        '--no-warnings',
+        '--newline', // Progress on new lines
+    ];
+    
+    if (formatId && formatId !== 'best') {
+        args.push('-f', formatId);
+    } else {
+        args.push('-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best');
+    }
+    
+    args.push(videoUrl);
+    
+    return new Promise((resolve, reject) => {
+        const proc = spawn(ytdlpBinary, args, {
+            env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' }
+        });
+        
+        let outputFile = null;
+        let lastProgress = '';
+        
+        proc.stdout.on('data', (data) => {
+            const line = data.toString().trim();
+            if (line.includes('[download]') && line.includes('%')) {
+                lastProgress = line;
+            }
+            // Detect merge/output filename
+            const mergeMatch = line.match(/\[Merger\] Merging formats into "(.+)"/);
+            const dlMatch = line.match(/\[download\] Destination: (.+)/);
+            const alreadyMatch = line.match(/\[download\] (.+) has already been downloaded/);
+            
+            if (mergeMatch) outputFile = mergeMatch[1];
+            else if (dlMatch && !outputFile) outputFile = dlMatch[1];
+            else if (alreadyMatch) outputFile = alreadyMatch[1];
+        });
+        
+        proc.stderr.on('data', (data) => {
+            console.error(`[yt-dlp stderr] ${data.toString().trim()}`);
+        });
+        
+        proc.on('close', (code) => {
+            if (code !== 0) {
+                return reject(new Error(`yt-dlp exited with code ${code}`));
+            }
+            
+            // Find the output file
+            if (!outputFile) {
+                // Search for the file in downloads dir
+                const files = fs.readdirSync(DOWNLOAD_DIR)
+                    .filter(f => f.startsWith(filename))
+                    .map(f => ({
+                        name: f,
+                        path: path.join(DOWNLOAD_DIR, f),
+                        time: fs.statSync(path.join(DOWNLOAD_DIR, f)).mtimeMs
+                    }))
+                    .sort((a, b) => b.time - a.time);
+                
+                if (files.length > 0) {
+                    outputFile = files[0].path;
+                }
+            }
+            
+            if (outputFile && fs.existsSync(outputFile)) {
+                resolve(outputFile);
+            } else {
+                reject(new Error('Download completed but file not found'));
+            }
+        });
+        
+        proc.on('error', (err) => {
+            reject(new Error(`Failed to start yt-dlp: ${err.message}`));
+        });
+    });
+}
+
+// ========== HTTP Server ==========
+
 function parseBody(req) {
     return new Promise((resolve, reject) => {
         let body = '';
@@ -44,69 +236,10 @@ function parseBody(req) {
     });
 }
 
-// Make HTTP/HTTPS request following redirects
-function fetchUrl(targetUrl, maxRedirects = 5) {
-    return new Promise((resolve, reject) => {
-        if (maxRedirects <= 0) {
-            return reject(new Error('Too many redirects'));
-        }
-
-        const parsedUrl = new URL(targetUrl);
-        const client = parsedUrl.protocol === 'https:' ? https : http;
-
-        const options = {
-            hostname: parsedUrl.hostname,
-            port: parsedUrl.port,
-            path: parsedUrl.pathname + parsedUrl.search,
-            method: 'GET',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': '*/*',
-                'Accept-Encoding': 'identity',
-                'Connection': 'keep-alive'
-            },
-            timeout: 30000
-        };
-
-        const req = client.request(options, (res) => {
-            // Handle redirects
-            if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
-                const redirectUrl = res.headers.location;
-                if (!redirectUrl) {
-                    return reject(new Error('Redirect without Location header'));
-                }
-                const absoluteUrl = redirectUrl.startsWith('http')
-                    ? redirectUrl
-                    : new URL(redirectUrl, targetUrl).toString();
-                return fetchUrl(absoluteUrl, maxRedirects - 1).then(resolve).catch(reject);
-            }
-
-            if (res.statusCode !== 200) {
-                return reject(new Error(`Remote server returned HTTP ${res.statusCode}`));
-            }
-
-            resolve(res);
-        });
-
-        req.on('error', (e) => {
-            reject(new Error(`Connection failed: ${e.message}`));
-        });
-
-        req.on('timeout', () => {
-            req.destroy();
-            reject(new Error('Connection timeout'));
-        });
-
-        req.end();
-    });
-}
-
-// Serve static files
 function serveStatic(req, res) {
     let filePath = req.url === '/' ? '/index.html' : req.url;
     filePath = path.join(__dirname, filePath.split('?')[0]);
 
-    // Security: prevent directory traversal
     if (!filePath.startsWith(__dirname)) {
         res.writeHead(403);
         res.end('Forbidden');
@@ -127,8 +260,8 @@ function serveStatic(req, res) {
     });
 }
 
-// Handle download API
-async function handleDownload(req, res) {
+// API: Parse video info
+async function handleParse(req, res) {
     try {
         const body = await parseBody(req);
         const videoUrl = body.url;
@@ -139,62 +272,117 @@ async function handleDownload(req, res) {
             return;
         }
 
-        // Validate URL
-        try {
-            new URL(videoUrl);
-        } catch (e) {
+        console.log(`[Parse] Analyzing: ${videoUrl}`);
+        
+        const info = await getVideoInfo(videoUrl);
+        
+        // Extract relevant info
+        const formats = (info.formats || [])
+            .filter(f => f.vcodec !== 'none' || f.acodec !== 'none')
+            .map(f => ({
+                format_id: f.format_id,
+                ext: f.ext,
+                resolution: f.resolution || (f.height ? `${f.width || '?'}x${f.height}` : 'audio only'),
+                filesize: f.filesize || f.filesize_approx || null,
+                vcodec: f.vcodec,
+                acodec: f.acodec,
+                fps: f.fps,
+                tbr: f.tbr,
+                format_note: f.format_note || ''
+            }));
+
+        const result = {
+            title: info.title || 'Unknown',
+            duration: info.duration || 0,
+            thumbnail: info.thumbnail || null,
+            uploader: info.uploader || info.channel || '',
+            webpage_url: info.webpage_url || videoUrl,
+            description: (info.description || '').substring(0, 200),
+            formats: formats
+        };
+
+        res.writeHead(200, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify(result));
+
+    } catch (error) {
+        console.error(`[Parse] Error: ${error.message}`);
+        res.writeHead(500, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify({ error: error.message }));
+    }
+}
+
+// API: Download video
+async function handleDownload(req, res) {
+    try {
+        const body = await parseBody(req);
+        const videoUrl = body.url;
+        const formatId = body.format || 'best';
+
+        if (!videoUrl) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Invalid URL format' }));
+            res.end(JSON.stringify({ error: 'Missing url parameter' }));
             return;
         }
 
-        console.log(`[Download] Fetching: ${videoUrl}`);
+        console.log(`[Download] Starting download: ${videoUrl} (format: ${formatId})`);
+        
+        const filePath = await downloadVideo(videoUrl, formatId, res);
+        const fileName = path.basename(filePath);
+        const stat = fs.statSync(filePath);
+        
+        // Stream the file to client
+        res.writeHead(200, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': stat.size,
+            'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+            'Access-Control-Allow-Origin': '*',
+            'X-File-Name': encodeURIComponent(fileName),
+            'X-File-Size': stat.size
+        });
 
-        const remoteRes = await fetchUrl(videoUrl);
-        const contentType = remoteRes.headers['content-type'] || 'application/octet-stream';
-        const contentLength = remoteRes.headers['content-length'];
-
-        // Set response headers
-        const headers = {
-            'Content-Type': contentType,
-            'Access-Control-Allow-Origin': '*'
-        };
-
-        if (contentLength) {
-            headers['Content-Length'] = contentLength;
-        }
-
-        // Extract filename from Content-Disposition if available
-        const disposition = remoteRes.headers['content-disposition'];
-        if (disposition) {
-            headers['Content-Disposition'] = disposition;
-        }
-
-        res.writeHead(200, headers);
-
-        // Stream the response
-        remoteRes.pipe(res);
-
-        remoteRes.on('error', (err) => {
-            console.error(`[Download] Stream error: ${err.message}`);
-            if (!res.headersSent) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Stream error' }));
-            } else {
-                res.end();
-            }
+        const stream = fs.createReadStream(filePath);
+        stream.pipe(res);
+        
+        stream.on('end', () => {
+            // Clean up downloaded file after sending
+            setTimeout(() => {
+                fs.unlink(filePath, () => {});
+            }, 5000);
         });
 
     } catch (error) {
         console.error(`[Download] Error: ${error.message}`);
         if (!res.headersSent) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.writeHead(500, { 
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
             res.end(JSON.stringify({ error: error.message }));
         }
     }
 }
 
-// Create server
+// API: Check yt-dlp status
+function handleStatus(req, res) {
+    const ready = fs.existsSync(ytdlpBinary);
+    res.writeHead(200, { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+    });
+    res.end(JSON.stringify({ 
+        ready: ready,
+        platform: os.platform(),
+        arch: os.arch()
+    }));
+}
+
+// Create HTTP server
 const server = http.createServer(async (req, res) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
 
@@ -203,22 +391,28 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type'
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Expose-Headers': 'X-File-Name, X-File-Size'
         });
         res.end();
         return;
     }
 
+    const parsedUrl = req.url.split('?')[0];
+
     // API routes
-    if (req.url === '/api/download' && req.method === 'POST') {
+    if (parsedUrl === '/api/parse' && req.method === 'POST') {
+        await handleParse(req, res);
+        return;
+    }
+
+    if (parsedUrl === '/api/download' && req.method === 'POST') {
         await handleDownload(req, res);
         return;
     }
 
-    // Health check
-    if (req.url === '/api/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+    if (parsedUrl === '/api/status' && req.method === 'GET') {
+        handleStatus(req, res);
         return;
     }
 
@@ -226,11 +420,27 @@ const server = http.createServer(async (req, res) => {
     serveStatic(req, res);
 });
 
-server.listen(PORT, () => {
-    console.log(`\n==========================================`);
-    console.log(`  Video Download Server`);
-    console.log(`  Running at: http://localhost:${PORT}`);
-    console.log(`==========================================\n`);
-    console.log(`Open http://localhost:${PORT} in your browser.`);
-    console.log(`Press Ctrl+C to stop.\n`);
-});
+// ========== Start Server ==========
+
+async function main() {
+    console.log('\n==========================================');
+    console.log('  Video Download Tool - yt-dlp Backend');
+    console.log('==========================================\n');
+
+    // Check/download yt-dlp
+    const ready = await ensureYtdlp();
+    if (!ready) {
+        console.error('\n[ERROR] yt-dlp is not available. The tool will not work without it.');
+        console.error('[ERROR] Please download yt-dlp manually and place it in the bin/ folder.\n');
+    } else {
+        console.log('[OK] yt-dlp is ready.\n');
+    }
+
+    server.listen(PORT, () => {
+        console.log(`  Server running at: http://localhost:${PORT}`);
+        console.log(`  Open this URL in your browser to use the tool.`);
+        console.log(`\n  Press Ctrl+C to stop.\n`);
+    });
+}
+
+main();
