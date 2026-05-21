@@ -1,0 +1,12 @@
+{
+  "name": "video-downloader",
+  "version": "1.0.0",
+  "description": "网页视频下载工具 - 输入链接地址直接下载视频",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["video", "download", "web-tool"],
+  "license": "MIT"
+}

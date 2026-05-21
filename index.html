@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频下载工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            color: #1a1a2e;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            outline: none;
+        }
+
+        .input-group input:focus {
+            border-color: #0f3460;
+            box-shadow: 0 0 0 3px rgba(15, 52, 96, 0.1);
+        }
+
+        .input-group input::placeholder {
+            color: #aaa;
+        }
+
+        .btn-download {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #0f3460, #1a1a2e);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+
+        .btn-download:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(15, 52, 96, 0.3);
+        }
+
+        .btn-download:active {
+            transform: translateY(0);
+        }
+
+        .btn-download:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 14px;
+            border-radius: 10px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status.info {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #90caf9;
+            display: block;
+        }
+
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #a5d6a7;
+            display: block;
+        }
+
+        .status.error {
+            background: #fce4ec;
+            color: #c62828;
+            border: 1px solid #ef9a9a;
+            display: block;
+        }
+
+        .progress-bar {
+            margin-top: 16px;
+            display: none;
+        }
+
+        .progress-bar.active {
+            display: block;
+        }
+
+        .progress-track {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0f3460, #1a1a2e);
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .progress-text {
+            text-align: center;
+            margin-top: 8px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .tips {
+            margin-top: 28px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .tips h3 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .tips ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .tips ul li {
+            font-size: 13px;
+            color: #666;
+            padding: 4px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .tips ul li::before {
+            content: "•";
+            position: absolute;
+            left: 6px;
+            color: #0f3460;
+        }
+
+        .mode-toggle {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 24px;
+            gap: 8px;
+        }
+
+        .mode-btn {
+            padding: 8px 16px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #666;
+        }
+
+        .mode-btn.active {
+            border-color: #0f3460;
+            background: #0f3460;
+            color: white;
+        }
+
+        .mode-btn:hover:not(.active) {
+            border-color: #0f3460;
+            color: #0f3460;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>视频下载工具</h1>
+            <p>输入视频链接地址，直接下载视频文件</p>
+        </div>
+
+        <div class="mode-toggle">
+            <button class="mode-btn active" onclick="setMode('proxy')" id="mode-proxy">代理模式</button>
+            <button class="mode-btn" onclick="setMode('direct')" id="mode-direct">直接模式</button>
+        </div>
+
+        <div class="input-group">
+            <label for="videoUrl">视频链接地址</label>
+            <input type="url" id="videoUrl" placeholder="https://example.com/video.mp4" 
+                   onkeypress="if(event.key==='Enter')downloadVideo()">
+        </div>
+
+        <div class="input-group">
+            <label for="fileName">文件名（可选）</label>
+            <input type="text" id="fileName" placeholder="自动从URL提取，或输入自定义文件名">
+        </div>
+
+        <button class="btn-download" id="btnDownload" onclick="downloadVideo()">
+            开始下载
+        </button>
+
+        <div class="progress-bar" id="progressBar">
+            <div class="progress-track">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">准备下载...</div>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="tips">
+            <h3>使用说明</h3>
+            <ul>
+                <li><strong>代理模式</strong>：通过后端服务器代理下载，可绕过跨域限制（需启动后端服务）</li>
+                <li><strong>直接模式</strong>：浏览器直接下载，适用于无跨域限制的直链视频</li>
+                <li>支持 MP4、WebM、AVI、MKV、MOV 等常见视频格式</li>
+                <li>支持任何可直接访问的视频文件 URL</li>
+                <li>如遇下载失败，请检查链接是否为有效的视频直链</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'proxy';
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('mode-proxy').classList.toggle('active', mode === 'proxy');
+            document.getElementById('mode-direct').classList.toggle('active', mode === 'direct');
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + type;
+        }
+
+        function hideStatus() {
+            document.getElementById('status').className = 'status';
+        }
+
+        function showProgress(show) {
+            document.getElementById('progressBar').classList.toggle('active', show);
+        }
+
+        function updateProgress(percent, text) {
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+
+        function getFileName(url) {
+            const customName = document.getElementById('fileName').value.trim();
+            if (customName) {
+                // Ensure it has a video extension
+                if (!/\.\w{2,4}$/.test(customName)) {
+                    const urlExt = url.split('?')[0].split('.').pop();
+                    const validExts = ['mp4', 'webm', 'avi', 'mkv', 'mov', 'flv', 'wmv'];
+                    const ext = validExts.includes(urlExt) ? urlExt : 'mp4';
+                    return customName + '.' + ext;
+                }
+                return customName;
+            }
+            // Extract from URL
+            try {
+                const pathname = new URL(url).pathname;
+                const name = pathname.split('/').pop();
+                if (name && /\.\w{2,4}$/.test(name)) {
+                    return decodeURIComponent(name);
+                }
+            } catch (e) {}
+            return 'video_' + Date.now() + '.mp4';
+        }
+
+        async function downloadVideo() {
+            const url = document.getElementById('videoUrl').value.trim();
+            if (!url) {
+                showStatus('请输入视频链接地址', 'error');
+                return;
+            }
+
+            // Basic URL validation
+            try {
+                new URL(url);
+            } catch (e) {
+                showStatus('请输入有效的URL地址', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btnDownload');
+            btn.disabled = true;
+            btn.textContent = '下载中...';
+            hideStatus();
+
+            if (currentMode === 'direct') {
+                await downloadDirect(url);
+            } else {
+                await downloadViaProxy(url);
+            }
+
+            btn.disabled = false;
+            btn.textContent = '开始下载';
+        }
+
+        async function downloadDirect(url) {
+            const fileName = getFileName(url);
+            showProgress(true);
+            updateProgress(0, '正在连接...');
+
+            try {
+                const response = await fetch(url, { mode: 'cors' });
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+                }
+
+                const contentLength = response.headers.get('content-length');
+                const total = contentLength ? parseInt(contentLength) : 0;
+                let loaded = 0;
+
+                const reader = response.body.getReader();
+                const chunks = [];
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    loaded += value.length;
+
+                    if (total > 0) {
+                        const percent = Math.round((loaded / total) * 100);
+                        updateProgress(percent, `下载中: ${formatSize(loaded)} / ${formatSize(total)} (${percent}%)`);
+                    } else {
+                        updateProgress(50, `下载中: ${formatSize(loaded)}`);
+                    }
+                }
+
+                const blob = new Blob(chunks);
+                triggerDownload(blob, fileName);
+                updateProgress(100, '下载完成!');
+                showStatus(`下载成功! 文件: ${fileName} (${formatSize(loaded)})`, 'success');
+            } catch (error) {
+                showProgress(false);
+                if (error.message.includes('Failed to fetch') || error.message.includes('CORS')) {
+                    showStatus('下载失败: 跨域限制。请尝试使用"代理模式"', 'error');
+                } else {
+                    showStatus('下载失败: ' + error.message, 'error');
+                }
+            }
+        }
+
+        async function downloadViaProxy(url) {
+            const fileName = getFileName(url);
+            showProgress(true);
+            updateProgress(0, '正在通过代理服务器下载...');
+
+            try {
+                const response = await fetch('/api/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'HTTP ' + response.status);
+                }
+
+                const contentLength = response.headers.get('content-length');
+                const total = contentLength ? parseInt(contentLength) : 0;
+                let loaded = 0;
+
+                const reader = response.body.getReader();
+                const chunks = [];
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    loaded += value.length;
+
+                    if (total > 0) {
+                        const percent = Math.round((loaded / total) * 100);
+                        updateProgress(percent, `下载中: ${formatSize(loaded)} / ${formatSize(total)} (${percent}%)`);
+                    } else {
+                        updateProgress(50, `下载中: ${formatSize(loaded)}`);
+                    }
+                }
+
+                const blob = new Blob(chunks);
+                triggerDownload(blob, fileName);
+                updateProgress(100, '下载完成!');
+                showStatus(`下载成功! 文件: ${fileName} (${formatSize(loaded)})`, 'success');
+            } catch (error) {
+                showProgress(false);
+                if (error.message.includes('Failed to fetch')) {
+                    showStatus('无法连接到代理服务器。请确保后端服务已启动 (node server.js)', 'error');
+                } else {
+                    showStatus('下载失败: ' + error.message, 'error');
+                }
+            }
+        }
+
+        function triggerDownload(blob, fileName) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        }
+    </script>
+</body>
+</html>
