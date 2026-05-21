@@ -106,6 +106,7 @@ function downloadFile(url, dest, timeoutMs = 30000, maxRedirects = 10) {
 
 async function ensureYtdlp() {
     if (fs.existsSync(ytdlpBinary)) {
+        console.log('[OK] yt-dlp found (bundled).');
         return true;
     }
     
@@ -113,32 +114,33 @@ async function ensureYtdlp() {
     ytdlpDownloadError = null;
     
     const urls = getYtdlpDownloadUrls();
-    console.log('[Setup] yt-dlp not found, downloading...');
+    console.log('[Setup] yt-dlp not found in bin/ folder, attempting download...');
+    console.log('[Setup] (This is normal on first run if you deleted the bin/ folder)');
     
     for (let i = 0; i < urls.length; i++) {
         const url = urls[i];
-        console.log(`[Setup] Trying mirror ${i + 1}/${urls.length}: ${url}`);
+        console.log(`[Setup] Trying source ${i + 1}/${urls.length}...`);
         try {
-            await downloadFile(url, ytdlpBinary, 60000);
+            await downloadFile(url, ytdlpBinary, 90000);
             console.log('[Setup] yt-dlp downloaded successfully!');
             ytdlpDownloading = false;
             return true;
         } catch (err) {
-            console.error(`[Setup] Mirror ${i + 1} failed: ${err.message}`);
+            console.error(`[Setup] Source ${i + 1} failed: ${err.message}`);
             // Clean up partial file
             try { fs.unlinkSync(ytdlpBinary); } catch (e) {}
             if (i < urls.length - 1) {
-                console.log('[Setup] Trying next mirror...');
+                console.log('[Setup] Trying next source...');
             }
         }
     }
     
     ytdlpDownloading = false;
-    ytdlpDownloadError = 'All download mirrors failed';
-    console.error('[Setup] Failed to download yt-dlp from all mirrors.');
-    console.error('[Setup] Please download yt-dlp manually:');
-    console.error(`[Setup]   Windows: https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe`);
-    console.error(`[Setup]   Place it in: ${BIN_DIR}`);
+    ytdlpDownloadError = 'All download sources failed. Please re-download the complete ZIP from GitHub.';
+    console.error('[Setup] Failed to download yt-dlp from all sources.');
+    console.error('[Setup] Solution: Re-download the complete project ZIP from:');
+    console.error('[Setup]   https://github.com/wuyedexue/G112');
+    console.error('[Setup]   The ZIP already includes yt-dlp.exe in the bin/ folder.');
     return false;
 }
 

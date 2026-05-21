@@ -1,0 +1,5 @@
+# Downloaded videos (temporary)
+downloads/
+
+# Node modules (if any)
+node_modules/
