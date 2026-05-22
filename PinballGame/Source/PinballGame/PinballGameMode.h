@@ -123,4 +123,11 @@ private:
 	void SaveHighScore();
 	/** 加载最高分 */
 	void LoadHighScore();
+
+	/** 程序化生成整个弹球台场景 */
+	void SpawnPinballScene();
+	/** 创建HUD */
+	void CreateHUD();
+	/** 设置俯视摄像机 */
+	void SetupCamera();
 };

@@ -2,10 +2,16 @@
 
 #include "PinballGameMode.h"
 #include "PinballBall.h"
+#include "PinballTable.h"
+#include "PinballFlipper.h"
+#include "PinballBumper.h"
+#include "PinballLauncher.h"
+#include "PinballHUD.h"
 #include "PinballSaveGame.h"
 #include "PinballPlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/SaveGame.h"
+#include "Camera/CameraActor.h"
 #include "Engine/World.h"
 
 APinballGameMode::APinballGameMode()
@@ -15,6 +21,12 @@ APinballGameMode::APinballGameMode()
 
 	// 默认 Pawn 为空（弹球不需要玩家角色）
 	DefaultPawnClass = nullptr;
+
+	// 设置 HUD 类
+	HUDClass = APinballHUD::StaticClass();
+
+	// 设置默认 BallClass
+	BallClass = APinballBall::StaticClass();
 }
 
 void APinballGameMode::BeginPlay()
@@ -31,13 +43,95 @@ void APinballGameMode::BeginPlay()
 	// 加载最高分
 	LoadHighScore();
 
+	// 程序化生成场景
+	SpawnPinballScene();
+
+	// 设置摄像机
+	SetupCamera();
+
 	// 通知 UI 初始状态
 	OnScoreChanged.Broadcast(CurrentScore);
 	OnLivesChanged.Broadcast(RemainingLives);
 	OnMultiplierChanged.Broadcast(ScoreMultiplier);
 
-	// 生成第一个球
-	SpawnNewBall();
+	// 生成第一个球（延迟1秒等待场景就绪）
+	FTimerHandle SpawnTimer;
+	GetWorld()->GetTimerManager().SetTimer(SpawnTimer, this, &APinballGameMode::SpawnNewBall, 1.0f, false);
+}
+
+void APinballGameMode::SpawnPinballScene()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	// === 生成弹球台 ===
+	APinballTable* Table = World->SpawnActor<APinballTable>(APinballTable::StaticClass(), FVector(0.f, 0.f, 0.f), FRotator::ZeroRotator, SpawnParams);
+
+	// === 生成左挡板 ===
+	APinballFlipper* LFlipper = World->SpawnActor<APinballFlipper>(APinballFlipper::StaticClass(), FVector(-60.f, -170.f, 15.f), FRotator::ZeroRotator, SpawnParams);
+	if (LFlipper)
+	{
+		LFlipper->Tags.Add(TEXT("LeftFlipper"));
+	}
+
+	// === 生成右挡板 ===
+	APinballFlipper* RFlipper = World->SpawnActor<APinballFlipper>(APinballFlipper::StaticClass(), FVector(60.f, -170.f, 15.f), FRotator::ZeroRotator, SpawnParams);
+	if (RFlipper)
+	{
+		RFlipper->Tags.Add(TEXT("RightFlipper"));
+	}
+
+	// === 生成发射器（右侧通道底部） ===
+	World->SpawnActor<APinballLauncher>(APinballLauncher::StaticClass(), FVector(90.f, -150.f, 10.f), FRotator::ZeroRotator, SpawnParams);
+
+	// === 生成 Bumpers ===
+	// 上方区域放置6个弹射器
+	TArray<FVector> BumperLocations = {
+		FVector(-40.f, 80.f, 15.f),
+		FVector(40.f, 80.f, 15.f),
+		FVector(0.f, 120.f, 15.f),
+		FVector(-60.f, 30.f, 15.f),
+		FVector(60.f, 30.f, 15.f),
+		FVector(0.f, 50.f, 15.f)
+	};
+
+	for (const FVector& Loc : BumperLocations)
+	{
+		World->SpawnActor<APinballBumper>(APinballBumper::StaticClass(), Loc, FRotator::ZeroRotator, SpawnParams);
+	}
+
+	// 设置球生成位置（发射器区域上方）
+	BallSpawnLocation = FVector(90.f, -140.f, 25.f);
+
+	UE_LOG(LogTemp, Log, TEXT("PinballScene spawned: Table, 2 Flippers, 1 Launcher, 6 Bumpers"));
+}
+
+void APinballGameMode::SetupCamera()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	// 俯视摄像机（从上方看弹球台）
+	ACameraActor* Camera = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FVector(0.f, 0.f, 500.f), FRotator(-90.f, 0.f, 0.f), SpawnParams);
+
+	// 将玩家视角切换到这个摄像机
+	APlayerController* PC = World->GetFirstPlayerController();
+	if (PC && Camera)
+	{
+		PC->SetViewTarget(Camera);
+	}
+}
+
+void APinballGameMode::CreateHUD()
+{
+	// HUD通过Canvas绘制方式由PlayerController直接处理
+	// 避免BindWidget依赖Widget Blueprint
 }
 
 void APinballGameMode::AddScore(int32 Points)
@@ -132,14 +226,15 @@ void APinballGameMode::SpawnNewBall()
 	if (bIsGameOver) return;
 	if (!BallClass) 
 	{
-		UE_LOG(LogTemp, Warning, TEXT("BallClass not set in GameMode!"));
-		return;
+		// 默认使用 APinballBall
+		BallClass = APinballBall::StaticClass();
 	}
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 	GetWorld()->SpawnActor<AActor>(BallClass, BallSpawnLocation, FRotator::ZeroRotator, SpawnParams);
+	UE_LOG(LogTemp, Log, TEXT("New ball spawned at %s"), *BallSpawnLocation.ToString());
 }
 
 void APinballGameMode::SaveHighScore()

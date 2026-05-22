@@ -1,136 +1,124 @@
 // PinballHUD.cpp
+// Canvas-based HUD - 无需Widget Blueprint，程序化绘制
 
 #include "PinballHUD.h"
 #include "PinballGameMode.h"
-#include "Components/TextBlock.h"
-#include "Components/ProgressBar.h"
-#include "Components/VerticalBox.h"
-#include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/Canvas.h"
+#include "Engine/Font.h"
 
-void UPinballHUD::NativeConstruct()
+APinballHUD::APinballHUD()
 {
-	Super::NativeConstruct();
+}
 
-	// 初始化UI
-	if (GameOverPanel)
-	{
-		GameOverPanel->SetVisibility(ESlateVisibility::Collapsed);
-	}
-
-	if (RestartButton)
-	{
-		RestartButton->OnClicked.AddDynamic(this, &UPinballHUD::OnRestartClicked);
-	}
-
-	if (LauncherChargeBar)
-	{
-		LauncherChargeBar->SetPercent(0.f);
-	}
+void APinballHUD::BeginPlay()
+{
+	Super::BeginPlay();
 
 	// 绑定 GameMode 事件
 	APinballGameMode* GameMode = Cast<APinballGameMode>(UGameplayStatics::GetGameMode(this));
 	if (GameMode)
 	{
-		GameMode->OnScoreChanged.AddDynamic(this, &UPinballHUD::UpdateScore);
-		GameMode->OnLivesChanged.AddDynamic(this, &UPinballHUD::UpdateLives);
-		GameMode->OnMultiplierChanged.AddDynamic(this, &UPinballHUD::UpdateMultiplier);
-		GameMode->OnGameOver.AddDynamic(this, &UPinballHUD::OnGameOverTriggered);
-	}
+		GameMode->OnScoreChanged.AddDynamic(this, &APinballHUD::OnScoreChanged);
+		GameMode->OnLivesChanged.AddDynamic(this, &APinballHUD::OnLivesChanged);
+		GameMode->OnMultiplierChanged.AddDynamic(this, &APinballHUD::OnMultiplierChanged);
+		GameMode->OnGameOver.AddDynamic(this, &APinballHUD::OnGameOver);
 
-	// 初始显示
-	UpdateScore(0);
-	UpdateLives(3);
-	UpdateMultiplier(1);
-}
-
-void UPinballHUD::UpdateScore(int32 NewScore)
-{
-	if (ScoreText)
-	{
-		ScoreText->SetText(FText::FromString(FString::Printf(TEXT("%d"), NewScore)));
+		CachedHighScore = GameMode->GetHighScore();
 	}
 }
 
-void UPinballHUD::UpdateLives(int32 RemainingLives)
+void APinballHUD::DrawHUD()
 {
-	if (LivesText)
+	Super::DrawHUD();
+
+	if (!Canvas) return;
+
+	const float ScreenW = Canvas->SizeX;
+	const float ScreenH = Canvas->SizeY;
+
+	// === 分数 (左上角) ===
+	FString ScoreStr = FString::Printf(TEXT("SCORE: %d"), CachedScore);
+	DrawText(ScoreStr, FLinearColor::White, 20.f, 20.f, nullptr, 1.5f);
+
+	// === 最高分 (右上角) ===
+	FString HighScoreStr = FString::Printf(TEXT("BEST: %d"), CachedHighScore);
+	DrawText(HighScoreStr, FLinearColor::Yellow, ScreenW - 200.f, 20.f, nullptr, 1.2f);
+
+	// === 生命值 (左上角下方) ===
+	FString LivesStr = FString::Printf(TEXT("LIVES: %d"), CachedLives);
+	DrawText(LivesStr, FLinearColor::Green, 20.f, 55.f, nullptr, 1.2f);
+
+	// === 倍率 (分数下方) ===
+	if (CachedMultiplier > 1)
 	{
-		// 用球形图标表示生命
-		FString LivesStr;
-		for (int32 i = 0; i < RemainingLives; i++)
-		{
-			LivesStr += TEXT("● ");
-		}
-		LivesText->SetText(FText::FromString(LivesStr));
+		FString MultStr = FString::Printf(TEXT("x%d COMBO"), CachedMultiplier);
+		DrawText(MultStr, FLinearColor(1.f, 0.5f, 0.f, 1.f), 20.f, 85.f, nullptr, 1.3f);
+	}
+
+	// === 操作提示 (底部) ===
+	DrawText(TEXT("A/D: Flippers | SPACE: Launch | R: Restart"), FLinearColor(0.7f, 0.7f, 0.7f, 1.f), 20.f, ScreenH - 30.f, nullptr, 0.9f);
+
+	// === Game Over 界面 ===
+	if (bShowGameOver)
+	{
+		// 半透明背景
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.7f), 0.f, 0.f, ScreenW, ScreenH);
+
+		// Game Over 文字
+		float CenterX = ScreenW / 2.f - 100.f;
+		float CenterY = ScreenH / 2.f - 60.f;
+
+		DrawText(TEXT("GAME OVER"), FLinearColor::Red, CenterX, CenterY, nullptr, 2.5f);
+
+		FString FinalScore = FString::Printf(TEXT("Final Score: %d"), CachedScore);
+		DrawText(FinalScore, FLinearColor::White, CenterX, CenterY + 50.f, nullptr, 1.5f);
+
+		FString BestScore = FString::Printf(TEXT("Best: %d"), CachedHighScore);
+		DrawText(BestScore, FLinearColor::Yellow, CenterX, CenterY + 80.f, nullptr, 1.3f);
+
+		DrawText(TEXT("Press R to Restart"), FLinearColor::Green, CenterX, CenterY + 120.f, nullptr, 1.2f);
 	}
 }
 
-void UPinballHUD::UpdateMultiplier(int32 NewMultiplier)
+void APinballHUD::OnScoreChanged(int32 NewScore)
 {
-	if (MultiplierText)
-	{
-		if (NewMultiplier > 1)
-		{
-			MultiplierText->SetText(FText::FromString(FString::Printf(TEXT("x%d"), NewMultiplier)));
-			MultiplierText->SetVisibility(ESlateVisibility::Visible);
-		}
-		else
-		{
-			MultiplierText->SetVisibility(ESlateVisibility::Hidden);
-		}
-	}
-}
+	CachedScore = NewScore;
 
-void UPinballHUD::ShowGameOver(int32 FinalScore, int32 HighScore)
-{
-	if (GameOverPanel)
-	{
-		GameOverPanel->SetVisibility(ESlateVisibility::Visible);
-	}
-
-	if (GameOverScoreText)
-	{
-		GameOverScoreText->SetText(FText::FromString(FString::Printf(TEXT("Score: %d"), FinalScore)));
-	}
-
-	if (GameOverHighScoreText)
-	{
-		GameOverHighScoreText->SetText(FText::FromString(FString::Printf(TEXT("Best: %d"), HighScore)));
-	}
-}
-
-void UPinballHUD::HideGameOver()
-{
-	if (GameOverPanel)
-	{
-		GameOverPanel->SetVisibility(ESlateVisibility::Collapsed);
-	}
-}
-
-void UPinballHUD::UpdateLauncherCharge(float Percent)
-{
-	if (LauncherChargeBar)
-	{
-		LauncherChargeBar->SetPercent(Percent);
-	}
-}
-
-void UPinballHUD::OnRestartClicked()
-{
 	APinballGameMode* GameMode = Cast<APinballGameMode>(UGameplayStatics::GetGameMode(this));
 	if (GameMode)
 	{
-		GameMode->RestartGame();
-		HideGameOver();
+		CachedHighScore = GameMode->GetHighScore();
+		// 如果分数归零且游戏没有结束，说明是重新开始
+		if (NewScore == 0 && !GameMode->IsGameOver())
+		{
+			bShowGameOver = false;
+		}
 	}
 }
 
-void UPinballHUD::OnGameOverTriggered()
+void APinballHUD::OnLivesChanged(int32 NewLives)
 {
+	CachedLives = NewLives;
+}
+
+void APinballHUD::OnMultiplierChanged(int32 NewMultiplier)
+{
+	CachedMultiplier = NewMultiplier;
+}
+
+void APinballHUD::OnGameOver()
+{
+	bShowGameOver = true;
+
 	APinballGameMode* GameMode = Cast<APinballGameMode>(UGameplayStatics::GetGameMode(this));
 	if (GameMode)
 	{
-		ShowGameOver(GameMode->GetCurrentScore(), GameMode->GetHighScore());
+		CachedHighScore = GameMode->GetHighScore();
 	}
+}
+
+void APinballHUD::DrawTextCentered(const FString& Text, float X, float Y, FLinearColor Color, float Scale)
+{
+	DrawText(Text, Color, X, Y, nullptr, Scale);
 }

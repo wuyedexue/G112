@@ -1,84 +1,41 @@
 // PinballHUD.h
-// 弹球游戏HUD - 显示分数、生命、倍率和游戏结束界面
+// 弹球游戏HUD - 使用Canvas直接绘制，无需Widget Blueprint
 
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "GameFramework/HUD.h"
 #include "PinballHUD.generated.h"
 
-class UTextBlock;
-class UProgressBar;
-class UVerticalBox;
-class UButton;
-
 UCLASS()
-class PINBALLGAME_API UPinballHUD : public UUserWidget
+class PINBALLGAME_API APinballHUD : public AHUD
 {
 	GENERATED_BODY()
 
 public:
-	/** 更新分数显示 */
-	UFUNCTION(BlueprintCallable, Category = "Pinball|HUD")
-	void UpdateScore(int32 NewScore);
+	APinballHUD();
 
-	/** 更新生命显示 */
-	UFUNCTION(BlueprintCallable, Category = "Pinball|HUD")
-	void UpdateLives(int32 RemainingLives);
-
-	/** 更新倍率显示 */
-	UFUNCTION(BlueprintCallable, Category = "Pinball|HUD")
-	void UpdateMultiplier(int32 NewMultiplier);
-
-	/** 显示游戏结束界面 */
-	UFUNCTION(BlueprintCallable, Category = "Pinball|HUD")
-	void ShowGameOver(int32 FinalScore, int32 HighScore);
-
-	/** 隐藏游戏结束界面 */
-	UFUNCTION(BlueprintCallable, Category = "Pinball|HUD")
-	void HideGameOver();
-
-	/** 更新发射器蓄力条 */
-	UFUNCTION(BlueprintCallable, Category = "Pinball|HUD")
-	void UpdateLauncherCharge(float Percent);
-
-protected:
-	virtual void NativeConstruct() override;
-
-	// === UI 绑定 ===
-	// 这些需要在 UMG 蓝图中绑定对应的 Widget
-
-	UPROPERTY(meta = (BindWidget))
-	UTextBlock* ScoreText;
-
-	UPROPERTY(meta = (BindWidget))
-	UTextBlock* HighScoreText;
-
-	UPROPERTY(meta = (BindWidget))
-	UTextBlock* LivesText;
-
-	UPROPERTY(meta = (BindWidget))
-	UTextBlock* MultiplierText;
-
-	UPROPERTY(meta = (BindWidget))
-	UProgressBar* LauncherChargeBar;
-
-	UPROPERTY(meta = (BindWidget))
-	UVerticalBox* GameOverPanel;
-
-	UPROPERTY(meta = (BindWidget))
-	UTextBlock* GameOverScoreText;
-
-	UPROPERTY(meta = (BindWidget))
-	UTextBlock* GameOverHighScoreText;
-
-	UPROPERTY(meta = (BindWidget))
-	UButton* RestartButton;
+	virtual void BeginPlay() override;
+	virtual void DrawHUD() override;
 
 private:
-	UFUNCTION()
-	void OnRestartClicked();
+	// 缓存的游戏数据
+	int32 CachedScore = 0;
+	int32 CachedLives = 3;
+	int32 CachedMultiplier = 1;
+	int32 CachedHighScore = 0;
+	bool bShowGameOver = false;
 
+	// 事件回调
 	UFUNCTION()
-	void OnGameOverTriggered();
+	void OnScoreChanged(int32 NewScore);
+	UFUNCTION()
+	void OnLivesChanged(int32 NewLives);
+	UFUNCTION()
+	void OnMultiplierChanged(int32 NewMultiplier);
+	UFUNCTION()
+	void OnGameOver();
+
+	// 绘制工具函数
+	void DrawTextCentered(const FString& Text, float X, float Y, FLinearColor Color, float Scale = 1.0f);
 };

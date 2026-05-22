@@ -11,10 +11,7 @@ public class PinballGame : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"InputCore",
-			"PhysicsCore",
-			"UMG",
-			"Slate",
-			"SlateCore"
+			"PhysicsCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

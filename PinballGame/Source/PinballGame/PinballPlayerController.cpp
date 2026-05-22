@@ -19,11 +19,12 @@ void APinballPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 自动查找场景中的弹球组件
-	FindPinballActors();
-
-	// 设置摄像机视角（俯视弹球台）
-	// 实际项目中应在关卡中放置摄像机
+	// 延迟查找场景中的弹球组件（等待GameMode生成场景）
+	FTimerHandle FindTimer;
+	GetWorld()->GetTimerManager().SetTimer(FindTimer, [this]()
+	{
+		FindPinballActors();
+	}, 0.5f, false);
 }
 
 void APinballPlayerController::SetupInputComponent()
@@ -132,16 +133,15 @@ void APinballPlayerController::OnRestart()
 
 void APinballPlayerController::FindPinballActors()
 {
-	// 查找左右挡板
+	// 查找左右挡板（通过Tag区分）
 	for (TActorIterator<APinballFlipper> It(GetWorld()); It; ++It)
 	{
 		APinballFlipper* Flipper = *It;
-		// 通过标签或属性区分左右
-		if (Flipper->ActorHasTag(TEXT("LeftFlipper")) || !LeftFlipper)
+		if (Flipper->ActorHasTag(TEXT("LeftFlipper")))
 		{
 			LeftFlipper = Flipper;
 		}
-		if (Flipper->ActorHasTag(TEXT("RightFlipper")))
+		else if (Flipper->ActorHasTag(TEXT("RightFlipper")))
 		{
 			RightFlipper = Flipper;
 		}
