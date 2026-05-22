@@ -14,7 +14,7 @@ APinballFlipper::APinballFlipper()
 
 	// 碰撞盒
 	FlipperCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("FlipperCollision"));
-	FlipperCollision->SetBoxExtent(FVector(40.f, 5.f, 5.f)); // 长条形
+	FlipperCollision->SetBoxExtent(FVector(100.f, 12.f, 12.f)); // 长条形（放大以匹配更大的台面）
 	FlipperCollision->SetCollisionProfileName(TEXT("PhysicsActor"));
 	FlipperCollision->SetSimulatePhysics(false); // 使用Kinematic运动
 	FlipperCollision->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Block);
@@ -30,7 +30,7 @@ APinballFlipper::APinballFlipper()
 	if (BoxMesh.Succeeded())
 	{
 		FlipperMesh->SetStaticMesh(BoxMesh.Object);
-		FlipperMesh->SetWorldScale3D(FVector(0.8f, 0.1f, 0.1f)); // 扁平长条
+		FlipperMesh->SetWorldScale3D(FVector(2.0f, 0.24f, 0.24f)); // 扁平长条（放大）
 	}
 }
 
@@ -55,14 +55,14 @@ void APinballFlipper::BeginPlay()
 	}
 	SetActorRotation(InitialRotation);
 
-	// 设置明亮的橙色材质
+	// 设置灰色材质（用户要求碰撞体为灰色）
 	if (FlipperMesh && FlipperMesh->GetMaterial(0))
 	{
 		UMaterialInstanceDynamic* FlipMat = UMaterialInstanceDynamic::Create(
 			FlipperMesh->GetMaterial(0), this);
 		if (FlipMat)
 		{
-			FlipMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.5f, 0.0f));
+			FlipMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.5f, 0.5f, 0.5f));
 			FlipperMesh->SetMaterial(0, FlipMat);
 		}
 	}

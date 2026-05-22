@@ -76,11 +76,11 @@ protected:
 
 	/** 台面宽度 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Table")
-	float TableWidth = 200.f;
+	float TableWidth = 500.f;
 
 	/** 台面长度（高度方向） */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Table")
-	float TableLength = 400.f;
+	float TableLength = 1000.f;
 
 	/** 台面倾斜角度 (度) - 不再使用物理倾斜，由Ball TiltForce模拟 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pinball|Table")
@@ -88,15 +88,15 @@ protected:
 
 	/** 墙壁高度 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Table")
-	float WallHeight = 20.f;
+	float WallHeight = 50.f;
 
 	/** 墙壁厚度 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Table")
-	float WallThickness = 5.f;
+	float WallThickness = 12.f;
 
 	/** 排水口宽度（底部中央开口） */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Table")
-	float DrainGapWidth = 60.f;
+	float DrainGapWidth = 150.f;
 
 private:
 	UFUNCTION()

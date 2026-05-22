@@ -61,13 +61,13 @@ public:
 		}
 	}
 
-	// === 预定义颜色常量 ===
-	static FLinearColor TableColor()    { return FLinearColor(0.05f, 0.18f, 0.05f); }  // 深绿色台面
-	static FLinearColor WallColor()     { return FLinearColor(0.35f, 0.25f, 0.12f); }  // 木色墙壁
-	static FLinearColor BallColor()     { return FLinearColor(0.95f, 0.95f, 1.0f); }   // 银白色球
-	static FLinearColor FlipperColor()  { return FLinearColor(1.0f, 0.55f, 0.05f); }   // 橙色挡板
-	static FLinearColor BumperColor()   { return FLinearColor(1.0f, 0.15f, 0.15f); }   // 红色弹射器
-	static FLinearColor LauncherColor() { return FLinearColor(0.6f, 0.05f, 0.05f); }   // 深红发射器
+	// === 预定义颜色常量（用户要求：球=红，地面=白，碰撞体=灰）===
+	static FLinearColor TableColor()    { return FLinearColor(1.0f, 1.0f, 1.0f); }    // 白色台面
+	static FLinearColor WallColor()     { return FLinearColor(0.5f, 0.5f, 0.5f); }    // 灰色墙壁
+	static FLinearColor BallColor()     { return FLinearColor(1.0f, 0.0f, 0.0f); }    // 红色球
+	static FLinearColor FlipperColor()  { return FLinearColor(0.5f, 0.5f, 0.5f); }    // 灰色挡板
+	static FLinearColor BumperColor()   { return FLinearColor(0.5f, 0.5f, 0.5f); }    // 灰色弹射器
+	static FLinearColor LauncherColor() { return FLinearColor(0.5f, 0.5f, 0.5f); }    // 灰色发射器
 
 private:
 	static UMaterial* CreateColorBaseMaterial()

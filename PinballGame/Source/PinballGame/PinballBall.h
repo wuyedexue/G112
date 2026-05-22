@@ -71,23 +71,23 @@ protected:
 
 	/** 最大速度限制 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Physics")
-	float MaxSpeed = 3000.f;
+	float MaxSpeed = 5000.f;
 
 	/** 最小速度（低于此值会被加速，防止球停下来） */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Physics")
-	float MinSpeed = 100.f;
+	float MinSpeed = 150.f;
 
 	/** 球台倾斜角度对应的重力分量 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Physics")
-	float TableTiltGravity = 200.f;
+	float TableTiltGravity = 400.f;
 
 	/** 掉落检测Z坐标 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Physics")
-	float DrainZThreshold = -200.f;
+	float DrainZThreshold = -500.f;
 
 	/** 球的半径 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Physics")
-	float BallRadius = 15.0f;
+	float BallRadius = 30.0f;
 
 private:
 	/** 碰撞响应 */

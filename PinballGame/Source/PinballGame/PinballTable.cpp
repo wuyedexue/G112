@@ -112,11 +112,11 @@ APinballTable::APinballTable()
 	DrainTrigger->SetGenerateOverlapEvents(true);
 
 	// 发射通道右侧墙（将launcher通道与主台面隔开）
-	// 通道宽度需容纳球(半径15)，放在X=60处，通道为X=65到X=105(40单位宽)
+	// 通道宽度需容纳球(半径30)，放在X=150处，通道为X=155到X=250(约100单位宽)
 	LauncherChannelWall = CreateDefaultSubobject<UBoxComponent>(TEXT("LauncherChannelWall"));
 	LauncherChannelWall->SetupAttachment(RootComponent);
 	LauncherChannelWall->SetBoxExtent(FVector(WallThickness, TableLength / 3.f, WallHeight));
-	LauncherChannelWall->SetRelativeLocation(FVector(60.f, -TableLength / 6.f, WallHeight));
+	LauncherChannelWall->SetRelativeLocation(FVector(150.f, -TableLength / 6.f, WallHeight));
 	LauncherChannelWall->SetCollisionProfileName(TEXT("BlockAll"));
 	LauncherChannelWall->SetSimulatePhysics(false);
 }
@@ -137,19 +137,19 @@ void APinballTable::BeginPlay()
 
 void APinballTable::ApplyMaterials()
 {
-	// 深绿色台面
+	// 白色台面（用户要求地面为白色）
 	if (TableFloor && TableFloor->GetMaterial(0))
 	{
 		UMaterialInstanceDynamic* FloorMat = UMaterialInstanceDynamic::Create(
 			TableFloor->GetMaterial(0), this);
 		if (FloorMat)
 		{
-			FloorMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.05f, 0.3f, 0.05f));
+			FloorMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 1.0f, 1.0f));
 			TableFloor->SetMaterial(0, FloorMat);
 		}
 	}
 
-	// 棕色墙壁
+	// 灰色墙壁（用户要求碰撞体为灰色）
 	TArray<UStaticMeshComponent*> WallMeshes = { LeftWallMesh, RightWallMesh, TopWallMesh };
 	for (UStaticMeshComponent* WMesh : WallMeshes)
 	{
@@ -159,7 +159,7 @@ void APinballTable::ApplyMaterials()
 				WMesh->GetMaterial(0), this);
 			if (WallMat)
 			{
-				WallMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.45f, 0.25f, 0.1f));
+				WallMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.5f, 0.5f, 0.5f));
 				WMesh->SetMaterial(0, WallMat);
 			}
 		}

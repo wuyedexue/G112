@@ -14,7 +14,7 @@ APinballLauncher::APinballLauncher()
 
 	// 发射器碰撞区域（足够大以包含球）
 	LauncherCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("LauncherCollision"));
-	LauncherCollision->SetBoxExtent(FVector(25.f, 30.f, 30.f));
+	LauncherCollision->SetBoxExtent(FVector(50.f, 60.f, 60.f));
 	LauncherCollision->SetCollisionProfileName(TEXT("OverlapAll"));
 	LauncherCollision->SetSimulatePhysics(false);
 	RootComponent = LauncherCollision;
@@ -28,7 +28,7 @@ APinballLauncher::APinballLauncher()
 	if (CylinderMesh.Succeeded())
 	{
 		PlungerMesh->SetStaticMesh(CylinderMesh.Object);
-		PlungerMesh->SetWorldScale3D(FVector(0.15f, 0.15f, 0.3f));
+		PlungerMesh->SetWorldScale3D(FVector(0.3f, 0.3f, 0.6f));
 	}
 }
 
@@ -37,14 +37,14 @@ void APinballLauncher::BeginPlay()
 	Super::BeginPlay();
 	PlungerInitialLocation = PlungerMesh->GetRelativeLocation();
 
-	// 设置深红色材质
+	// 设置灰色材质（用户要求碰撞体为灰色）
 	if (PlungerMesh && PlungerMesh->GetMaterial(0))
 	{
 		UMaterialInstanceDynamic* LauncherMat = UMaterialInstanceDynamic::Create(
 			PlungerMesh->GetMaterial(0), this);
 		if (LauncherMat)
 		{
-			LauncherMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.6f, 0.05f, 0.05f));
+			LauncherMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.5f, 0.5f, 0.5f));
 			PlungerMesh->SetMaterial(0, LauncherMat);
 		}
 	}

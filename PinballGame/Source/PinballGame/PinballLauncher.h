@@ -59,11 +59,11 @@ protected:
 
 	/** 最小发射力 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Launcher")
-	float MinLaunchForce = 500.f;
+	float MinLaunchForce = 1200.f;
 
 	/** 最大发射力 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Launcher")
-	float MaxLaunchForce = 2500.f;
+	float MaxLaunchForce = 6000.f;
 
 	/** 发射方向 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pinball|Launcher")

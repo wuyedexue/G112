@@ -74,7 +74,7 @@ protected:
 
 	/** 碰撞半径 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Bumper")
-	float CollisionRadius = 20.f;
+	float CollisionRadius = 45.f;
 
 private:
 	/** 碰撞回调 */

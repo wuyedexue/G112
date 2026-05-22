@@ -56,15 +56,15 @@ void APinballBall::BeginPlay()
 		SphereCollision->SetAngularDamping(0.5f);
 	}
 
-	// 设置明亮的银白色材质，确保球清晰可见
+	// 设置红色材质，确保球清晰可见（用户要求球为红色）
 	if (BallMesh && BallMesh->GetMaterial(0))
 	{
 		UMaterialInstanceDynamic* BallMat = UMaterialInstanceDynamic::Create(
 			BallMesh->GetMaterial(0), this);
 		if (BallMat)
 		{
-			// BasicShapeMaterial 使用 "Color" 参数
-			BallMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.9f, 0.9f, 1.0f, 1.0f));
+			// 红色球体 - 在白色地面上高度可见
+			BallMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));
 			BallMesh->SetMaterial(0, BallMat);
 		}
 	}

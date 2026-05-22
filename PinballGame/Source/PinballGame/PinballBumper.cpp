@@ -33,7 +33,7 @@ APinballBumper::APinballBumper()
 	if (CylinderMesh.Succeeded())
 	{
 		BumperMesh->SetStaticMesh(CylinderMesh.Object);
-		BumperMesh->SetWorldScale3D(FVector(0.4f, 0.4f, 0.2f));
+		BumperMesh->SetWorldScale3D(FVector(0.9f, 0.9f, 0.4f));
 	}
 
 	// 击中指示灯
@@ -51,35 +51,35 @@ void APinballBumper::BeginPlay()
 	// 绑定碰撞
 	BumperCollision->OnComponentHit.AddDynamic(this, &APinballBumper::OnBumperHit);
 
-	// 根据类型设置参数
+	// 根据类型设置参数（力度按比例放大以匹配更大的台面）
 	switch (BumperType)
 	{
 	case EBumperType::RoundBumper:
-		BounceForce = 1200.f;
+		BounceForce = 3000.f;
 		ScoreValue = 100;
 		break;
 	case EBumperType::TriangleBumper:
-		BounceForce = 800.f;
+		BounceForce = 2000.f;
 		ScoreValue = 50;
 		break;
 	case EBumperType::MushroomBumper:
-		BounceForce = 400.f;
+		BounceForce = 1000.f;
 		ScoreValue = 500;
 		break;
 	case EBumperType::DropTarget:
-		BounceForce = 200.f;
+		BounceForce = 500.f;
 		ScoreValue = 1000;
 		break;
 	}
 
-	// 设置红色材质让bumper清晰可见
+	// 设置灰色材质（用户要求碰撞体为灰色）
 	if (BumperMesh && BumperMesh->GetMaterial(0))
 	{
 		UMaterialInstanceDynamic* BumperMat = UMaterialInstanceDynamic::Create(
 			BumperMesh->GetMaterial(0), this);
 		if (BumperMat)
 		{
-			BumperMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.9f, 0.1f, 0.1f));
+			BumperMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.5f, 0.5f, 0.5f));
 			BumperMesh->SetMaterial(0, BumperMat);
 		}
 	}

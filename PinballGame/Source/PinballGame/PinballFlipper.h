@@ -75,7 +75,7 @@ protected:
 
 	/** 挡板击球力度 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Flipper")
-	float FlipForce = 800.f;
+	float FlipForce = 2000.f;
 
 private:
 	bool bIsActivated = false;

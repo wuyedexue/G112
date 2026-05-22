@@ -74,32 +74,32 @@ void APinballGameMode::SpawnPinballScene()
 	// === 生成弹球台 ===
 	APinballTable* Table = World->SpawnActor<APinballTable>(APinballTable::StaticClass(), FVector(0.f, 0.f, 0.f), FRotator::ZeroRotator, SpawnParams);
 
-	// === 生成左挡板 ===
-	APinballFlipper* LFlipper = World->SpawnActor<APinballFlipper>(APinballFlipper::StaticClass(), FVector(-60.f, -170.f, 15.f), FRotator::ZeroRotator, SpawnParams);
+	// === 生成左挡板（位置按台面2.5倍放大） ===
+	APinballFlipper* LFlipper = World->SpawnActor<APinballFlipper>(APinballFlipper::StaticClass(), FVector(-150.f, -425.f, 30.f), FRotator::ZeroRotator, SpawnParams);
 	if (LFlipper)
 	{
 		LFlipper->Tags.Add(TEXT("LeftFlipper"));
 	}
 
 	// === 生成右挡板 ===
-	APinballFlipper* RFlipper = World->SpawnActor<APinballFlipper>(APinballFlipper::StaticClass(), FVector(60.f, -170.f, 15.f), FRotator::ZeroRotator, SpawnParams);
+	APinballFlipper* RFlipper = World->SpawnActor<APinballFlipper>(APinballFlipper::StaticClass(), FVector(150.f, -425.f, 30.f), FRotator::ZeroRotator, SpawnParams);
 	if (RFlipper)
 	{
 		RFlipper->Tags.Add(TEXT("RightFlipper"));
 	}
 
 	// === 生成发射器（右侧通道底部） ===
-	World->SpawnActor<APinballLauncher>(APinballLauncher::StaticClass(), FVector(82.f, -160.f, 10.f), FRotator::ZeroRotator, SpawnParams);
+	World->SpawnActor<APinballLauncher>(APinballLauncher::StaticClass(), FVector(205.f, -400.f, 20.f), FRotator::ZeroRotator, SpawnParams);
 
 	// === 生成 Bumpers ===
-	// 上方区域放置6个弹射器
+	// 上方区域放置6个弹射器（位置按比例放大）
 	TArray<FVector> BumperLocations = {
-		FVector(-40.f, 80.f, 15.f),
-		FVector(40.f, 80.f, 15.f),
-		FVector(0.f, 120.f, 15.f),
-		FVector(-60.f, 30.f, 15.f),
-		FVector(60.f, 30.f, 15.f),
-		FVector(0.f, 50.f, 15.f)
+		FVector(-100.f, 200.f, 30.f),
+		FVector(100.f, 200.f, 30.f),
+		FVector(0.f, 300.f, 30.f),
+		FVector(-150.f, 75.f, 30.f),
+		FVector(150.f, 75.f, 30.f),
+		FVector(0.f, 125.f, 30.f)
 	};
 
 	for (const FVector& Loc : BumperLocations)
@@ -107,8 +107,8 @@ void APinballGameMode::SpawnPinballScene()
 		World->SpawnActor<APinballBumper>(APinballBumper::StaticClass(), Loc, FRotator::ZeroRotator, SpawnParams);
 	}
 
-	// 设置球生成位置（发射通道中心，确保球在launcher overlap区域内）
-	BallSpawnLocation = FVector(82.f, -160.f, 20.f);
+	// 设置球生成位置（发射通道中心）
+	BallSpawnLocation = FVector(205.f, -400.f, 40.f);
 
 	UE_LOG(LogTemp, Log, TEXT("PinballScene spawned: Table, 2 Flippers, 1 Launcher, 6 Bumpers"));
 }
@@ -121,8 +121,8 @@ void APinballGameMode::SetupCamera()
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	// 俯视摄像机（从上方看弹球台）
-	ACameraActor* Camera = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FVector(0.f, -30.f, 500.f), FRotator(-90.f, 0.f, 0.f), SpawnParams);
+	// 俯视摄像机（从上方看弹球台，提高高度以覆盖更大的台面）
+	ACameraActor* Camera = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FVector(0.f, -50.f, 1200.f), FRotator(-90.f, 0.f, 0.f), SpawnParams);
 
 	// 将玩家视角切换到这个摄像机
 	APlayerController* PC = World->GetFirstPlayerController();
