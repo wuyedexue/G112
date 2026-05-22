@@ -100,18 +100,30 @@ void APinballBall::OnBallHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 
 void APinballBall::CheckDrain()
 {
+	// 安全网：只有当Table的DrainTrigger没有检测到时才作为备用
+	// 如果已经被标记为draining，不再重复扣命
+	if (bIsDraining) return;
+
 	if (GetActorLocation().Z < DrainZThreshold)
 	{
-		// 球掉落了 - 通知 GameMode
-		APinballGameMode* GameMode = Cast<APinballGameMode>(UGameplayStatics::GetGameMode(this));
-		if (GameMode)
-		{
-			GameMode->LoseLife();
-		}
-
-		// 销毁球
-		Destroy();
+		MarkAsDraining();
 	}
+}
+
+void APinballBall::MarkAsDraining()
+{
+	if (bIsDraining) return;
+	bIsDraining = true;
+
+	// 球掉落 - 通知 GameMode
+	APinballGameMode* GameMode = Cast<APinballGameMode>(UGameplayStatics::GetGameMode(this));
+	if (GameMode)
+	{
+		GameMode->LoseLife();
+	}
+
+	// 销毁球
+	Destroy();
 }
 
 void APinballBall::ClampVelocity()

@@ -35,6 +35,7 @@ void UPinballHUD::NativeConstruct()
 		GameMode->OnScoreChanged.AddDynamic(this, &UPinballHUD::UpdateScore);
 		GameMode->OnLivesChanged.AddDynamic(this, &UPinballHUD::UpdateLives);
 		GameMode->OnMultiplierChanged.AddDynamic(this, &UPinballHUD::UpdateMultiplier);
+		GameMode->OnGameOver.AddDynamic(this, &UPinballHUD::OnGameOverTriggered);
 	}
 
 	// 初始显示
@@ -122,5 +123,14 @@ void UPinballHUD::OnRestartClicked()
 	{
 		GameMode->RestartGame();
 		HideGameOver();
+	}
+}
+
+void UPinballHUD::OnGameOverTriggered()
+{
+	APinballGameMode* GameMode = Cast<APinballGameMode>(UGameplayStatics::GetGameMode(this));
+	if (GameMode)
+	{
+		ShowGameOver(GameMode->GetCurrentScore(), GameMode->GetHighScore());
 	}
 }

@@ -2,6 +2,7 @@
 
 #include "PinballGameMode.h"
 #include "PinballBall.h"
+#include "PinballSaveGame.h"
 #include "PinballPlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/SaveGame.h"
@@ -143,14 +144,43 @@ void APinballGameMode::SpawnNewBall()
 
 void APinballGameMode::SaveHighScore()
 {
-	// 使用 SaveGame 保存最高分
-	// 实际实现中可以用 USaveGame 子类
-	UE_LOG(LogTemp, Log, TEXT("High Score Saved: %d"), HighScore);
+	UPinballSaveGame* SaveGameInstance = Cast<UPinballSaveGame>(
+		UGameplayStatics::LoadGameFromSlot(UPinballSaveGame::SaveSlotName, 0));
+
+	if (!SaveGameInstance)
+	{
+		SaveGameInstance = Cast<UPinballSaveGame>(
+			UGameplayStatics::CreateSaveGameObject(UPinballSaveGame::StaticClass()));
+	}
+
+	if (SaveGameInstance)
+	{
+		SaveGameInstance->HighScore = HighScore;
+		SaveGameInstance->TotalGamesPlayed++;
+		SaveGameInstance->TotalScoreEarned += CurrentScore;
+		if (ScoreMultiplier > SaveGameInstance->HighestMultiplier)
+		{
+			SaveGameInstance->HighestMultiplier = ScoreMultiplier;
+		}
+
+		UGameplayStatics::SaveGameToSlot(SaveGameInstance, UPinballSaveGame::SaveSlotName, 0);
+		UE_LOG(LogTemp, Log, TEXT("High Score Saved: %d"), HighScore);
+	}
 }
 
 void APinballGameMode::LoadHighScore()
 {
-	// 加载最高分
-	HighScore = 0; // 默认值，实际可从存档加载
-	UE_LOG(LogTemp, Log, TEXT("High Score Loaded: %d"), HighScore);
+	UPinballSaveGame* SaveGameInstance = Cast<UPinballSaveGame>(
+		UGameplayStatics::LoadGameFromSlot(UPinballSaveGame::SaveSlotName, 0));
+
+	if (SaveGameInstance)
+	{
+		HighScore = SaveGameInstance->HighScore;
+		UE_LOG(LogTemp, Log, TEXT("High Score Loaded: %d"), HighScore);
+	}
+	else
+	{
+		HighScore = 0;
+		UE_LOG(LogTemp, Log, TEXT("No save found, starting fresh."));
+	}
 }

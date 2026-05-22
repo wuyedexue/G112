@@ -87,6 +87,9 @@ void APinballFlipper::UpdateRotation(float DeltaTime)
 	// 根据左右侧调整方向
 	float Direction = (TargetAngle > CurrentAngle) ? 1.f : -1.f;
 
+	// 记录旋转前的角度
+	float PreviousAngle = CurrentAngle;
+
 	// 插值旋转
 	float DeltaAngle = Speed * DeltaTime * Direction;
 	CurrentAngle += DeltaAngle;
@@ -101,7 +104,7 @@ void APinballFlipper::UpdateRotation(float DeltaTime)
 		CurrentAngle = FMath::Max(CurrentAngle, TargetAngle);
 	}
 
-	// 应用旋转
+	// 计算新的旋转目标
 	FRotator NewRotation = GetActorRotation();
 	if (FlipperSide == EFlipperSide::Right)
 	{
@@ -111,29 +114,31 @@ void APinballFlipper::UpdateRotation(float DeltaTime)
 	{
 		NewRotation.Roll = CurrentAngle;
 	}
-	SetActorRotation(NewRotation);
 
-	// 如果正在快速抬起且碰到球，施加额外力
-	if (bIsActivated && FMath::Abs(DeltaAngle) > 5.f)
+	// 使用Sweep方式设置旋转，确保能推动物理对象
+	FHitResult SweepHit;
+	FlipperCollision->MoveComponent(
+		FVector::ZeroVector,
+		NewRotation,
+		true,  // bSweep = true，检测并推动物体
+		&SweepHit
+	);
+
+	// 如果Sweep命中了球并且正在快速抬起，施加额外冲量
+	if (bIsActivated && SweepHit.bBlockingHit)
 	{
-		// 通过 Sweep 检测是否有球在附近
-		TArray<FHitResult> HitResults;
-		FVector Start = GetActorLocation();
-		FVector End = Start + GetActorForwardVector() * 50.f;
-		FCollisionShape Shape = FCollisionShape::MakeBox(FVector(40.f, 5.f, 5.f));
-
-		if (GetWorld()->SweepMultiByChannel(HitResults, Start, End, GetActorQuat(), ECC_PhysicsBody, Shape))
+		APinballBall* Ball = Cast<APinballBall>(SweepHit.GetActor());
+		if (Ball)
 		{
-			for (const FHitResult& Hit : HitResults)
-			{
-				APinballBall* Ball = Cast<APinballBall>(Hit.GetActor());
-				if (Ball)
-				{
-					// 计算击球方向 - 向上和远离挡板
-					FVector FlipDirection = (FVector::UpVector + GetActorForwardVector()).GetSafeNormal();
-					Ball->AddImpulse(FlipDirection * FlipForce);
-				}
-			}
+			// 计算基于角速度的击球力度
+			float AngularVelocity = FMath::Abs(CurrentAngle - PreviousAngle) / DeltaTime;
+			float ImpulseStrength = FMath::Clamp(AngularVelocity / FlipUpSpeed, 0.3f, 1.0f) * FlipForce;
+
+			FVector FlipDirection = (Ball->GetActorLocation() - GetActorLocation()).GetSafeNormal();
+			FlipDirection.Z = FMath::Max(FlipDirection.Z, 0.3f);
+			FlipDirection.Normalize();
+
+			Ball->AddImpulse(FlipDirection * ImpulseStrength);
 		}
 	}
 }

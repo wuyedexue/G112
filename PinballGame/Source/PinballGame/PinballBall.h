@@ -81,14 +81,24 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Physics")
 	float BallRadius = 3.0f;
 
+	/** 标记球正在排水中，防止重复扣命 */
+	UFUNCTION(BlueprintCallable, Category = "Pinball|Ball")
+	void MarkAsDraining();
+
+	/** 球是否正在排水 */
+	UFUNCTION(BlueprintPure, Category = "Pinball|Ball")
+	bool IsDraining() const { return bIsDraining; }
+
 private:
 	/** 碰撞响应 */
 	UFUNCTION()
 	void OnBallHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 
-	/** 检查球是否掉落 */
+	/** 检查球是否掉落（安全网：如果触发器漏检） */
 	void CheckDrain();
 
 	/** 限制球速度 */
 	void ClampVelocity();
+
+	bool bIsDraining = false;
 };

@@ -75,15 +75,8 @@ void APinballTable::OnDrainOverlap(UPrimitiveComponent* OverlappedComp, AActor* 
 	APinballBall* Ball = Cast<APinballBall>(OtherActor);
 	if (!Ball) return;
 
-	// 球进入排水口 - 通知GameMode减命
-	APinballGameMode* GameMode = Cast<APinballGameMode>(UGameplayStatics::GetGameMode(this));
-	if (GameMode)
-	{
-		GameMode->LoseLife();
-	}
+	// 通过球的统一排水接口处理，防止与Ball自身的CheckDrain重复扣命
+	Ball->MarkAsDraining();
 
-	// 销毁球
-	Ball->Destroy();
-
-	UE_LOG(LogTemp, Log, TEXT("Ball drained!"));
+	UE_LOG(LogTemp, Log, TEXT("Ball drained via trigger!"));
 }

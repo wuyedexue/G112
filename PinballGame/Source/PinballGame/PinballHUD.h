@@ -78,4 +78,7 @@ protected:
 private:
 	UFUNCTION()
 	void OnRestartClicked();
+
+	UFUNCTION()
+	void OnGameOverTriggered();
 };
