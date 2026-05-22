@@ -4,6 +4,7 @@
 #include "PinballBall.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Engine/World.h"
 
@@ -53,6 +54,18 @@ void APinballFlipper::BeginPlay()
 		InitialRotation.Roll = DownAngle;
 	}
 	SetActorRotation(InitialRotation);
+
+	// 设置明亮的橙色材质
+	if (FlipperMesh && FlipperMesh->GetMaterial(0))
+	{
+		UMaterialInstanceDynamic* FlipMat = UMaterialInstanceDynamic::Create(
+			FlipperMesh->GetMaterial(0), this);
+		if (FlipMat)
+		{
+			FlipMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.5f, 0.0f));
+			FlipperMesh->SetMaterial(0, FlipMat);
+		}
+	}
 }
 
 void APinballFlipper::Tick(float DeltaTime)

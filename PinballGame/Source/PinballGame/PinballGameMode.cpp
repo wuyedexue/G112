@@ -12,6 +12,10 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/SaveGame.h"
 #include "Camera/CameraActor.h"
+#include "Engine/DirectionalLight.h"
+#include "Engine/PointLight.h"
+#include "Components/LightComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Engine/World.h"
 
 APinballGameMode::APinballGameMode()
@@ -85,7 +89,7 @@ void APinballGameMode::SpawnPinballScene()
 	}
 
 	// === 生成发射器（右侧通道底部） ===
-	World->SpawnActor<APinballLauncher>(APinballLauncher::StaticClass(), FVector(90.f, -150.f, 10.f), FRotator::ZeroRotator, SpawnParams);
+	World->SpawnActor<APinballLauncher>(APinballLauncher::StaticClass(), FVector(82.f, -160.f, 10.f), FRotator::ZeroRotator, SpawnParams);
 
 	// === 生成 Bumpers ===
 	// 上方区域放置6个弹射器
@@ -103,8 +107,8 @@ void APinballGameMode::SpawnPinballScene()
 		World->SpawnActor<APinballBumper>(APinballBumper::StaticClass(), Loc, FRotator::ZeroRotator, SpawnParams);
 	}
 
-	// 设置球生成位置（发射器区域上方）
-	BallSpawnLocation = FVector(90.f, -140.f, 25.f);
+	// 设置球生成位置（发射通道中心，确保球在launcher overlap区域内）
+	BallSpawnLocation = FVector(82.f, -160.f, 20.f);
 
 	UE_LOG(LogTemp, Log, TEXT("PinballScene spawned: Table, 2 Flippers, 1 Launcher, 6 Bumpers"));
 }
@@ -118,7 +122,7 @@ void APinballGameMode::SetupCamera()
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	// 俯视摄像机（从上方看弹球台）
-	ACameraActor* Camera = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FVector(0.f, 0.f, 500.f), FRotator(-90.f, 0.f, 0.f), SpawnParams);
+	ACameraActor* Camera = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FVector(0.f, -30.f, 500.f), FRotator(-90.f, 0.f, 0.f), SpawnParams);
 
 	// 将玩家视角切换到这个摄像机
 	APlayerController* PC = World->GetFirstPlayerController();
@@ -126,6 +130,44 @@ void APinballGameMode::SetupCamera()
 	{
 		PC->SetViewTarget(Camera);
 	}
+
+	// === 场景照明 ===
+
+	// 主方向光（从上方偏斜射入）
+	ADirectionalLight* MainLight = World->SpawnActor<ADirectionalLight>(ADirectionalLight::StaticClass(), FVector(0.f, 0.f, 400.f), FRotator(-60.f, 30.f, 0.f), SpawnParams);
+	if (MainLight)
+	{
+		ULightComponent* LightComp = MainLight->GetLightComponent();
+		if (LightComp)
+		{
+			LightComp->SetIntensity(4.0f);
+		}
+	}
+
+	// 补光方向光（从另一侧补光，减少暗面）
+	ADirectionalLight* FillLight = World->SpawnActor<ADirectionalLight>(ADirectionalLight::StaticClass(), FVector(0.f, 0.f, 300.f), FRotator(-45.f, -150.f, 0.f), SpawnParams);
+	if (FillLight)
+	{
+		ULightComponent* FillComp = FillLight->GetLightComponent();
+		if (FillComp)
+		{
+			FillComp->SetIntensity(2.0f);
+		}
+	}
+
+	// 中央点光源（环境补充）
+	APointLight* PointLight = World->SpawnActor<APointLight>(APointLight::StaticClass(), FVector(0.f, 0.f, 350.f), FRotator::ZeroRotator, SpawnParams);
+	if (PointLight)
+	{
+		UPointLightComponent* PLComp = PointLight->GetPointLightComponent();
+		if (PLComp)
+		{
+			PLComp->SetIntensity(3000.f);
+			PLComp->SetAttenuationRadius(800.f);
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Scene lighting setup complete: 2 directional + 1 point light"));
 }
 
 void APinballGameMode::CreateHUD()

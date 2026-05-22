@@ -83,11 +83,11 @@ protected:
 
 	/** 掉落检测Z坐标 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Physics")
-	float DrainZThreshold = -100.f;
+	float DrainZThreshold = -200.f;
 
 	/** 球的半径 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pinball|Physics")
-	float BallRadius = 3.0f;
+	float BallRadius = 15.0f;
 
 private:
 	/** 碰撞响应 */
@@ -101,4 +101,5 @@ private:
 	void ClampVelocity();
 
 	bool bIsDraining = false;
+	bool bHasBeenLaunched = false;
 };

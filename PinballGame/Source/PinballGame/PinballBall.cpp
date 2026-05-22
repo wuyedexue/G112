@@ -4,6 +4,7 @@
 #include "PinballGameMode.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 
@@ -32,7 +33,8 @@ APinballBall::APinballBall()
 	if (SphereMesh.Succeeded())
 	{
 		BallMesh->SetStaticMesh(SphereMesh.Object);
-		BallMesh->SetWorldScale3D(FVector(BallRadius / 50.f)); // 默认球体半径50
+		// 默认Sphere半径为50单位，缩放到BallRadius
+		BallMesh->SetWorldScale3D(FVector(BallRadius / 50.f));
 	}
 }
 
@@ -41,7 +43,7 @@ void APinballBall::BeginPlay()
 	Super::BeginPlay();
 
 	// 设置物理材质
-	SphereCollision->SetPhysMaterialOverride(nullptr); // 可在编辑器中设置
+	SphereCollision->SetPhysMaterialOverride(nullptr);
 	
 	// 绑定碰撞事件
 	SphereCollision->OnComponentHit.AddDynamic(this, &APinballBall::OnBallHit);
@@ -53,25 +55,43 @@ void APinballBall::BeginPlay()
 		SphereCollision->SetLinearDamping(0.1f);
 		SphereCollision->SetAngularDamping(0.5f);
 	}
+
+	// 设置明亮的银白色材质，确保球清晰可见
+	if (BallMesh && BallMesh->GetMaterial(0))
+	{
+		UMaterialInstanceDynamic* BallMat = UMaterialInstanceDynamic::Create(
+			BallMesh->GetMaterial(0), this);
+		if (BallMat)
+		{
+			// BasicShapeMaterial 使用 "Color" 参数
+			BallMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.9f, 0.9f, 1.0f, 1.0f));
+			BallMesh->SetMaterial(0, BallMat);
+		}
+	}
 }
 
 void APinballBall::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// 施加球台倾斜重力（模拟弹球台的倾斜）
-	FVector TiltForce = FVector(0.f, -TableTiltGravity * BallMass, 0.f);
-	SphereCollision->AddForce(TiltForce);
+	// 只有在球已被发射后才施加倾斜力和检查排水
+	if (bHasBeenLaunched)
+	{
+		// 施加球台倾斜重力（模拟弹球台的倾斜）
+		FVector TiltForce = FVector(0.f, -TableTiltGravity * BallMass, 0.f);
+		SphereCollision->AddForce(TiltForce);
 
-	// 检查是否掉入排水口
-	CheckDrain();
+		// 检查是否掉入排水口
+		CheckDrain();
 
-	// 限制速度
-	ClampVelocity();
+		// 限制速度
+		ClampVelocity();
+	}
 }
 
 void APinballBall::LaunchBall(FVector Force)
 {
+	bHasBeenLaunched = true;
 	SphereCollision->AddImpulse(Force, NAME_None, true);
 	UE_LOG(LogTemp, Log, TEXT("Ball launched with force: %s"), *Force.ToString());
 }

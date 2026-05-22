@@ -6,6 +6,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 
@@ -69,6 +70,18 @@ void APinballBumper::BeginPlay()
 		BounceForce = 200.f;
 		ScoreValue = 1000;
 		break;
+	}
+
+	// 设置红色材质让bumper清晰可见
+	if (BumperMesh && BumperMesh->GetMaterial(0))
+	{
+		UMaterialInstanceDynamic* BumperMat = UMaterialInstanceDynamic::Create(
+			BumperMesh->GetMaterial(0), this);
+		if (BumperMat)
+		{
+			BumperMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.9f, 0.1f, 0.1f));
+			BumperMesh->SetMaterial(0, BumperMat);
+		}
 	}
 }
 

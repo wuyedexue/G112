@@ -4,6 +4,7 @@
 #include "PinballBall.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 
@@ -11,9 +12,9 @@ APinballLauncher::APinballLauncher()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	// 发射器碰撞区域
+	// 发射器碰撞区域（足够大以包含球）
 	LauncherCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("LauncherCollision"));
-	LauncherCollision->SetBoxExtent(FVector(10.f, 10.f, 10.f));
+	LauncherCollision->SetBoxExtent(FVector(25.f, 30.f, 30.f));
 	LauncherCollision->SetCollisionProfileName(TEXT("OverlapAll"));
 	LauncherCollision->SetSimulatePhysics(false);
 	RootComponent = LauncherCollision;
@@ -35,6 +36,18 @@ void APinballLauncher::BeginPlay()
 {
 	Super::BeginPlay();
 	PlungerInitialLocation = PlungerMesh->GetRelativeLocation();
+
+	// 设置深红色材质
+	if (PlungerMesh && PlungerMesh->GetMaterial(0))
+	{
+		UMaterialInstanceDynamic* LauncherMat = UMaterialInstanceDynamic::Create(
+			PlungerMesh->GetMaterial(0), this);
+		if (LauncherMat)
+		{
+			LauncherMat->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.6f, 0.05f, 0.05f));
+			PlungerMesh->SetMaterial(0, LauncherMat);
+		}
+	}
 }
 
 void APinballLauncher::Tick(float DeltaTime)
