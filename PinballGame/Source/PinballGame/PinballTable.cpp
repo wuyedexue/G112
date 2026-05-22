@@ -3,6 +3,7 @@
 #include "PinballTable.h"
 #include "PinballBall.h"
 #include "PinballGameMode.h"
+#include "PinballMaterials.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -127,6 +128,12 @@ void APinballTable::BeginPlay()
 
 	// 不再物理倾斜台面——倾斜效果通过Ball的TiltForce模拟
 	// 这样避免了spawn坐标与倾斜后的碰撞面不匹配的问题
+
+	// === 应用彩色材质 ===
+	FPinballMaterials::ApplyColor(TableFloor, FPinballMaterials::TableColor());
+	FPinballMaterials::ApplyColor(LeftWallMesh, FPinballMaterials::WallColor());
+	FPinballMaterials::ApplyColor(RightWallMesh, FPinballMaterials::WallColor());
+	FPinballMaterials::ApplyColor(TopWallMesh, FPinballMaterials::WallColor());
 
 	// 绑定排水口重叠事件
 	DrainTrigger->OnComponentBeginOverlap.AddDynamic(this, &APinballTable::OnDrainOverlap);
