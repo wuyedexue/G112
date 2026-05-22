@@ -48,6 +48,18 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UBoxComponent* DrainTrigger;
 
+	/** 左墙可视网格 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UStaticMeshComponent* LeftWallMesh;
+
+	/** 右墙可视网格 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UStaticMeshComponent* RightWallMesh;
+
+	/** 顶墙可视网格 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UStaticMeshComponent* TopWallMesh;
+
 	// === 配置 ===
 
 	/** 台面宽度 */

@@ -13,6 +13,8 @@
 #include "GameFramework/SaveGame.h"
 #include "Camera/CameraActor.h"
 #include "Engine/World.h"
+#include "Components/PointLightComponent.h"
+#include "Components/DirectionalLightComponent.h"
 
 APinballGameMode::APinballGameMode()
 {
@@ -125,6 +127,43 @@ void APinballGameMode::SetupCamera()
 	if (PC && Camera)
 	{
 		PC->SetViewTarget(Camera);
+	}
+
+	// === 场景照明（解决黑屏问题：没有光源时所有网格体渲染为纯黑） ===
+	if (Camera)
+	{
+		// 主光源：方向光从上方斜射，模拟太阳照明
+		UDirectionalLightComponent* MainLight = NewObject<UDirectionalLightComponent>(Camera, TEXT("MainLight"));
+		MainLight->SetMobility(EComponentMobility::Movable);
+		MainLight->SetRelativeRotation(FRotator(-60.f, -30.f, 0.f));
+		MainLight->SetIntensity(4.0f);
+		MainLight->SetLightColor(FLinearColor(1.0f, 0.95f, 0.9f));
+		MainLight->SetCastShadows(true);
+		MainLight->RegisterComponent();
+		MainLight->AttachToComponent(Camera->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+
+		// 补光：从反方向照射，减少暗面死黑
+		UDirectionalLightComponent* FillLight = NewObject<UDirectionalLightComponent>(Camera, TEXT("FillLight"));
+		FillLight->SetMobility(EComponentMobility::Movable);
+		FillLight->SetRelativeRotation(FRotator(-40.f, 150.f, 0.f));
+		FillLight->SetIntensity(2.0f);
+		FillLight->SetLightColor(FLinearColor(0.85f, 0.9f, 1.0f));
+		FillLight->SetCastShadows(false);
+		FillLight->RegisterComponent();
+		FillLight->AttachToComponent(Camera->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+
+		// 顶部点光源：提供额外环境照明
+		UPointLightComponent* TopLight = NewObject<UPointLightComponent>(Camera, TEXT("TopLight"));
+		TopLight->SetMobility(EComponentMobility::Movable);
+		TopLight->SetRelativeLocation(FVector::ZeroVector);
+		TopLight->SetIntensity(800000.f);
+		TopLight->SetAttenuationRadius(1500.f);
+		TopLight->SetLightColor(FLinearColor::White);
+		TopLight->SetCastShadows(false);
+		TopLight->RegisterComponent();
+		TopLight->AttachToComponent(Camera->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+
+		UE_LOG(LogTemp, Log, TEXT("Scene lighting setup complete: 2 directional + 1 point light"));
 	}
 }
 

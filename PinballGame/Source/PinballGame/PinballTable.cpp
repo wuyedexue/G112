@@ -18,6 +18,8 @@ APinballTable::APinballTable()
 	TableFloor->SetSimulatePhysics(false);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneMesh(TEXT("/Engine/BasicShapes/Plane"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube"));
+
 	if (PlaneMesh.Succeeded())
 	{
 		TableFloor->SetStaticMesh(PlaneMesh.Object);
@@ -32,6 +34,18 @@ APinballTable::APinballTable()
 	LeftWall->SetCollisionProfileName(TEXT("BlockAll"));
 	LeftWall->SetSimulatePhysics(false);
 
+	// 左墙可视网格
+	LeftWallMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LeftWallMesh"));
+	LeftWallMesh->SetupAttachment(RootComponent);
+	LeftWallMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	LeftWallMesh->SetRelativeLocation(FVector(-TableWidth / 2.f - WallThickness, 0.f, WallHeight));
+	if (CubeMesh.Succeeded())
+	{
+		LeftWallMesh->SetStaticMesh(CubeMesh.Object);
+		// Cube 默认100x100x100，缩放到墙壁尺寸 (厚度x2 x 台面长度 x 墙高x2)
+		LeftWallMesh->SetRelativeScale3D(FVector(WallThickness * 2.f / 100.f, TableLength / 100.f, WallHeight * 2.f / 100.f));
+	}
+
 	// 右墙
 	RightWall = CreateDefaultSubobject<UBoxComponent>(TEXT("RightWall"));
 	RightWall->SetupAttachment(RootComponent);
@@ -40,6 +54,17 @@ APinballTable::APinballTable()
 	RightWall->SetCollisionProfileName(TEXT("BlockAll"));
 	RightWall->SetSimulatePhysics(false);
 
+	// 右墙可视网格
+	RightWallMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("RightWallMesh"));
+	RightWallMesh->SetupAttachment(RootComponent);
+	RightWallMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	RightWallMesh->SetRelativeLocation(FVector(TableWidth / 2.f + WallThickness, 0.f, WallHeight));
+	if (CubeMesh.Succeeded())
+	{
+		RightWallMesh->SetStaticMesh(CubeMesh.Object);
+		RightWallMesh->SetRelativeScale3D(FVector(WallThickness * 2.f / 100.f, TableLength / 100.f, WallHeight * 2.f / 100.f));
+	}
+
 	// 顶墙
 	TopWall = CreateDefaultSubobject<UBoxComponent>(TEXT("TopWall"));
 	TopWall->SetupAttachment(RootComponent);
@@ -47,6 +72,17 @@ APinballTable::APinballTable()
 	TopWall->SetRelativeLocation(FVector(0.f, TableLength / 2.f + WallThickness, WallHeight));
 	TopWall->SetCollisionProfileName(TEXT("BlockAll"));
 	TopWall->SetSimulatePhysics(false);
+
+	// 顶墙可视网格
+	TopWallMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TopWallMesh"));
+	TopWallMesh->SetupAttachment(RootComponent);
+	TopWallMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	TopWallMesh->SetRelativeLocation(FVector(0.f, TableLength / 2.f + WallThickness, WallHeight));
+	if (CubeMesh.Succeeded())
+	{
+		TopWallMesh->SetStaticMesh(CubeMesh.Object);
+		TopWallMesh->SetRelativeScale3D(FVector(TableWidth / 100.f, WallThickness * 2.f / 100.f, WallHeight * 2.f / 100.f));
+	}
 
 	// 排水口触发器（底部开口区域）
 	DrainTrigger = CreateDefaultSubobject<UBoxComponent>(TEXT("DrainTrigger"));
