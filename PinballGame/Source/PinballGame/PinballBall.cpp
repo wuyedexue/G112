@@ -2,6 +2,7 @@
 
 #include "PinballBall.h"
 #include "PinballGameMode.h"
+#include "PinballMaterials.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -53,6 +54,9 @@ void APinballBall::BeginPlay()
 		SphereCollision->SetLinearDamping(0.1f);
 		SphereCollision->SetAngularDamping(0.5f);
 	}
+
+	// 应用银白色材质
+	FPinballMaterials::ApplyColor(BallMesh, FPinballMaterials::BallColor());
 }
 
 void APinballBall::Tick(float DeltaTime)

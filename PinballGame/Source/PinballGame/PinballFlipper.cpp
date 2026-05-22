@@ -2,6 +2,7 @@
 
 #include "PinballFlipper.h"
 #include "PinballBall.h"
+#include "PinballMaterials.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -53,6 +54,9 @@ void APinballFlipper::BeginPlay()
 		InitialRotation.Roll = DownAngle;
 	}
 	SetActorRotation(InitialRotation);
+
+	// 应用橙色材质
+	FPinballMaterials::ApplyColor(FlipperMesh, FPinballMaterials::FlipperColor());
 }
 
 void APinballFlipper::Tick(float DeltaTime)

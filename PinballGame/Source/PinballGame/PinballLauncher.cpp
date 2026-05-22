@@ -2,6 +2,7 @@
 
 #include "PinballLauncher.h"
 #include "PinballBall.h"
+#include "PinballMaterials.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -35,6 +36,9 @@ void APinballLauncher::BeginPlay()
 {
 	Super::BeginPlay();
 	PlungerInitialLocation = PlungerMesh->GetRelativeLocation();
+
+	// 应用深红色材质
+	FPinballMaterials::ApplyColor(PlungerMesh, FPinballMaterials::LauncherColor());
 }
 
 void APinballLauncher::Tick(float DeltaTime)

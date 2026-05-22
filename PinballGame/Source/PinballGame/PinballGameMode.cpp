@@ -12,6 +12,10 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/SaveGame.h"
 #include "Camera/CameraActor.h"
+#include "Engine/DirectionalLight.h"
+#include "Engine/PointLight.h"
+#include "Components/LightComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Engine/World.h"
 
 APinballGameMode::APinballGameMode()
@@ -126,6 +130,46 @@ void APinballGameMode::SetupCamera()
 	{
 		PC->SetViewTarget(Camera);
 	}
+
+	// === 添加场景光照 ===
+	// 主方向光（从上方倾斜照射）
+	ADirectionalLight* MainLight = World->SpawnActor<ADirectionalLight>(ADirectionalLight::StaticClass(), FVector(0.f, 0.f, 400.f), FRotator(-60.f, 30.f, 0.f), SpawnParams);
+	if (MainLight)
+	{
+		ULightComponent* LightComp = MainLight->GetLightComponent();
+		if (LightComp)
+		{
+			LightComp->SetIntensity(3.0f);
+			LightComp->SetLightColor(FLinearColor(1.f, 0.95f, 0.9f));
+		}
+	}
+
+	// 补光（从另一侧）
+	ADirectionalLight* FillLight = World->SpawnActor<ADirectionalLight>(ADirectionalLight::StaticClass(), FVector(0.f, 0.f, 400.f), FRotator(-45.f, -150.f, 0.f), SpawnParams);
+	if (FillLight)
+	{
+		ULightComponent* FillComp = FillLight->GetLightComponent();
+		if (FillComp)
+		{
+			FillComp->SetIntensity(1.5f);
+			FillComp->SetLightColor(FLinearColor(0.8f, 0.85f, 1.f));
+		}
+	}
+
+	// 顶部点光源（照亮台面中央）
+	APointLight* TopPoint = World->SpawnActor<APointLight>(APointLight::StaticClass(), FVector(0.f, 0.f, 300.f), FRotator::ZeroRotator, SpawnParams);
+	if (TopPoint)
+	{
+		UPointLightComponent* PointComp = TopPoint->GetPointLightComponent();
+		if (PointComp)
+		{
+			PointComp->SetIntensity(5000.f);
+			PointComp->SetAttenuationRadius(800.f);
+			PointComp->SetLightColor(FLinearColor(1.f, 1.f, 0.95f));
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Camera and scene lighting setup complete"));
 }
 
 void APinballGameMode::CreateHUD()

@@ -3,6 +3,7 @@
 #include "PinballBumper.h"
 #include "PinballBall.h"
 #include "PinballGameMode.h"
+#include "PinballMaterials.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
@@ -70,6 +71,9 @@ void APinballBumper::BeginPlay()
 		ScoreValue = 1000;
 		break;
 	}
+
+	// 应用红色材质
+	FPinballMaterials::ApplyColor(BumperMesh, FPinballMaterials::BumperColor());
 }
 
 void APinballBumper::OnBumperHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
