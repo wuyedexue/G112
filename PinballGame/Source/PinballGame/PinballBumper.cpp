@@ -3,7 +3,6 @@
 #include "PinballBumper.h"
 #include "PinballBall.h"
 #include "PinballGameMode.h"
-#include "PinballMaterials.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"

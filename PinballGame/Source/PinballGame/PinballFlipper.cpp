@@ -2,7 +2,6 @@
 
 #include "PinballFlipper.h"
 #include "PinballBall.h"
-#include "PinballMaterials.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
