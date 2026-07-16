@@ -1,13 +1,14 @@
 {
-  "name": "video-downloader",
-  "version": "2.0.0",
-  "description": "全网视频下载工具 - 支持1000+视频网站，自动解析视频源并下载",
+  "name": "coordinate-tool-mvp",
+  "version": "1.0.0",
+  "description": "坐标识别、范围校验与 CSV/JSON 导出 MVP 工具",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node coordinate-core.test.js"
   },
-  "keywords": ["video", "download", "yt-dlp", "web-tool"],
+  "keywords": ["coordinate", "ocr", "polygon", "csv", "json"],
   "license": "MIT",
   "engines": {
     "node": ">=14.0.0"

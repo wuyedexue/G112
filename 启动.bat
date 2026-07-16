@@ -1,9 +1,9 @@
 @echo off
-title Video Download Tool
+title Coordinate Tool MVP
 
 echo.
 echo ==========================================
-echo   Video Download Tool
+echo   Coordinate Tool MVP
 echo ==========================================
 echo.
 
@@ -14,7 +14,7 @@ if %errorlevel% neq 0 goto NONODE
 echo [OK] Node.js found
 echo.
 echo Starting server...
-echo (First launch will download required components, please wait)
+echo Open the URL below after the server starts
 echo.
 echo ==========================================
 echo   Open in browser:
